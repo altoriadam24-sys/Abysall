@@ -176,17 +176,64 @@ task.spawn(function()
     if ok and gui.Parent then avatar.Image = url end
 end)
 
--- ESP objects
+-- ESP visuals: highlights, 2D boxes, and R6/R15 skeletons
+local overlay = Instance.new("ScreenGui")
+overlay.Name = "BronxStreetsOverlay"
+overlay.IgnoreGuiInset = true
+overlay.ResetOnSpawn = false
+overlay.DisplayOrder = 50
+overlay.Parent = pg
+
+local markerConnections = {}
+local overlayParts = {}
+local targetVisuals = {}
+
+local function overlayFrame(color, thickness)
+    local f = Instance.new("Frame")
+    f.BorderSizePixel = 0
+    f.BackgroundColor3 = color
+    f.Size = UDim2.fromOffset(0, thickness or 2)
+    f.Visible = false
+    f.Parent = overlay
+    table.insert(overlayParts, f)
+    return f
+end
+
+local function lineBetween(f, a, b, thickness)
+    local dx, dy = b.X - a.X, b.Y - a.Y
+    local length = math.sqrt(dx*dx + dy*dy)
+    local t = thickness or 2
+    f.Position = UDim2.fromOffset(
+        (a.X+b.X)/2-length/2,
+        (a.Y+b.Y)/2-t/2
+    )
+    f.Size = UDim2.fromOffset(length, t)
+    f.Rotation = math.deg(math.atan2(dy, dx))
+    f.Visible = length > 0
+end
+
 local function clearMarkers()
-    for _,obj in pairs(markers) do
+    for _, connection in ipairs(markerConnections) do
+        connection:Disconnect()
+    end
+    table.clear(markerConnections)
+
+    for _, obj in ipairs(markers) do
         if obj then obj:Destroy() end
     end
     table.clear(markers)
+
+    for _, obj in ipairs(overlayParts) do
+        obj:Destroy()
+    end
+    table.clear(overlayParts)
+    table.clear(targetVisuals)
 end
 
 local function isEnemy(target)
     if target == player then return false end
     if states["ESP:Team Check (Enemy Only)"] then
+        -- Uses Roblox Teams; custom factions need mapping.
         if player.Team and target.Team then
             return player.Team ~= target.Team
         end
@@ -194,25 +241,83 @@ local function isEnemy(target)
     return true
 end
 
+local skeletonR15 = {
+    {"Head","UpperTorso"},
+    {"UpperTorso","LowerTorso"},
+    {"UpperTorso","LeftUpperArm"},
+    {"LeftUpperArm","LeftLowerArm"},
+    {"LeftLowerArm","LeftHand"},
+    {"UpperTorso","RightUpperArm"},
+    {"RightUpperArm","RightLowerArm"},
+    {"RightLowerArm","RightHand"},
+    {"LowerTorso","LeftUpperLeg"},
+    {"LeftUpperLeg","LeftLowerLeg"},
+    {"LeftLowerLeg","LeftFoot"},
+    {"LowerTorso","RightUpperLeg"},
+    {"RightUpperLeg","RightLowerLeg"},
+    {"RightLowerLeg","RightFoot"}
+}
+
+local skeletonR6 = {
+    {"Head","Torso"},
+    {"Torso","Left Arm"},
+    {"Torso","Right Arm"},
+    {"Torso","Left Leg"},
+    {"Torso","Right Leg"}
+}
+
 local function createMarker(target)
-    if not target.Character or not isEnemy(target) then return end
+    if not target.Character or not isEnemy(target) then
+        return
+    end
+
     local char = target.Character
     local head = char:FindFirstChild("Head")
     local hum = char:FindFirstChildOfClass("Humanoid")
-    if not head or not hum or hum.Health <= 0 then return end
 
-    if states["ESP:Player ESP"] or states["ESP:Boxes"] then
+    if not head or not hum or hum.Health <= 0 then
+        return
+    end
+
+    if states["ESP:Player ESP"] then
         local h = Instance.new("Highlight")
         h.Name = "BronxESP"
         h.Adornee = char
         h.FillColor = Color3.fromRGB(255,45,55)
-        h.FillTransparency = states["ESP:Player ESP"] and .65 or 1
+        h.FillTransparency = .65
         h.OutlineColor = colors.green
-        h.OutlineTransparency =
-            states["ESP:Boxes"] and 0 or 1
         h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
         h.Parent = char
-        table.insert(markers,h)
+        table.insert(markers, h)
+    end
+
+    local visual = {
+        target = target,
+        character = char,
+        head = head
+    }
+    targetVisuals[#targetVisuals+1] = visual
+
+    if states["ESP:Boxes"] then
+        visual.box = {}
+        for i = 1, 4 do
+            visual.box[i] = overlayFrame(colors.green, 2)
+        end
+    end
+
+    if states["ESP:Skeleton"] then
+        visual.bones = {}
+        local pairsList =
+            hum.RigType == Enum.HumanoidRigType.R15
+            and skeletonR15 or skeletonR6
+
+        for _, pair in ipairs(pairsList) do
+            visual.bones[#visual.bones+1] = {
+                pair[1],
+                pair[2],
+                overlayFrame(colors.green, 2)
+            }
+        end
     end
 
     if states["ESP:Name"] or states["ESP:Distance"] then
@@ -224,30 +329,13 @@ local function createMarker(target)
         bb.AlwaysOnTop = true
         bb.Parent = pg
 
-        local lbl = text(bb,"",0,0,160,42,13,colors.green)
+        local lbl = text(
+            bb,"",0,0,160,42,13,colors.green
+        )
         lbl.TextXAlignment = Enum.TextXAlignment.Center
         lbl.TextStrokeTransparency = .2
         table.insert(markers,bb)
-
-        local function refresh()
-            if not bb.Parent then return end
-            local bits = {}
-            if states["ESP:Name"] then
-                table.insert(bits,target.DisplayName)
-            end
-            if states["ESP:Distance"] then
-                local myRoot = player.Character and
-                    player.Character:FindFirstChild("HumanoidRootPart")
-                local root = char:FindFirstChild("HumanoidRootPart")
-                if myRoot and root then
-                    local d = (root.Position-myRoot.Position).Magnitude
-                    table.insert(bits,string.format("%.0fm",d))
-                end
-            end
-            lbl.Text = table.concat(bits," | ")
-        end
-        table.insert(connections,
-            RunService.Heartbeat:Connect(refresh))
+        visual.info = lbl
     end
 end
 
@@ -258,9 +346,151 @@ local function refreshESP()
     end
 end
 
+local function hideVisual(v)
+    if v.box then
+        for _, edge in ipairs(v.box) do
+            edge.Visible = false
+        end
+    end
+
+    if v.bones then
+        for _, bone in ipairs(v.bones) do
+            bone[3].Visible = false
+        end
+    end
+end
+
+-- Update 2D ESP overlays
+table.insert(connections,
+    RunService.RenderStepped:Connect(function()
+        local camera = workspace.CurrentCamera
+        if not camera then return end
+
+        for _, v in ipairs(targetVisuals) do
+            local char = v.character
+            local hum = char and
+                char:FindFirstChildOfClass("Humanoid")
+            local root = char and
+                char:FindFirstChild("HumanoidRootPart")
+
+            if not hum or hum.Health <= 0
+                or not root or not isEnemy(v.target) then
+                hideVisual(v)
+                if v.info then v.info.Text = "" end
+            else
+                local center, visible =
+                    camera:WorldToViewportPoint(root.Position)
+
+                if not visible or center.Z <= 0 then
+                    hideVisual(v)
+                else
+                    if v.box then
+                        local top =
+                            camera:WorldToViewportPoint(
+                                root.Position + Vector3.new(0,3,0)
+                            )
+                        local bottom =
+                            camera:WorldToViewportPoint(
+                                root.Position - Vector3.new(0,3,0)
+                            )
+
+                        local height = math.clamp(
+                            math.abs(bottom.Y-top.Y),8,2000
+                        )
+                        local width = height * .48
+                        local x = center.X-width/2
+                        local y = math.min(top.Y,bottom.Y)
+
+                        local a = Vector2.new(x,y)
+                        local b = Vector2.new(x+width,y)
+                        local c = Vector2.new(
+                            x+width,y+height
+                        )
+                        local d = Vector2.new(x,y+height)
+
+                        lineBetween(v.box[1],a,b,2)
+                        lineBetween(v.box[2],b,c,2)
+                        lineBetween(v.box[3],c,d,2)
+                        lineBetween(v.box[4],d,a,2)
+                    end
+
+                    if v.bones then
+                        for _, bone in ipairs(v.bones) do
+                            local partA =
+                                char:FindFirstChild(bone[1])
+                            local partB =
+                                char:FindFirstChild(bone[2])
+
+                            if partA and partB then
+                                local aa, va =
+                                    camera:WorldToViewportPoint(
+                                        partA.Position
+                                    )
+                                local bb, vb =
+                                    camera:WorldToViewportPoint(
+                                        partB.Position
+                                    )
+
+                                if va and vb
+                                    and aa.Z > 0
+                                    and bb.Z > 0 then
+                                    lineBetween(
+                                        bone[3],
+                                        Vector2.new(aa.X,aa.Y),
+                                        Vector2.new(bb.X,bb.Y),
+                                        2
+                                    )
+                                else
+                                    bone[3].Visible = false
+                                end
+                            else
+                                bone[3].Visible = false
+                            end
+                        end
+                    end
+                end
+
+                if v.info then
+                    local bits = {}
+
+                    if states["ESP:Name"] then
+                        table.insert(
+                            bits,v.target.DisplayName
+                        )
+                    end
+
+                    if states["ESP:Distance"] then
+                        local myRoot =
+                            player.Character and
+                            player.Character:FindFirstChild(
+                                "HumanoidRootPart"
+                            )
+
+                        if myRoot then
+                            local d = (
+                                root.Position-myRoot.Position
+                            ).Magnitude
+
+                            table.insert(
+                                bits,
+                                string.format("%.0fm",d)
+                            )
+                        end
+                    end
+
+                    v.info.Text = table.concat(bits," | ")
+                end
+            end
+        end
+    end)
+)
+
 local espNames = {
-    ["Player ESP"]=true,["Name"]=true,
-    ["Distance"]=true,["Boxes"]=true,
+    ["Player ESP"]=true,
+    ["Name"]=true,
+    ["Distance"]=true,
+    ["Boxes"]=true,
+    ["Skeleton"]=true,
     ["Team Check (Enemy Only)"]=true
 }
 
@@ -273,22 +503,33 @@ end
 local function applyMovement()
     local h = humanoid()
     if not h then return end
-    h.WalkSpeed = states["Player:Speed"] and 28 or 16
+
+    h.WalkSpeed =
+        states["Player:Speed"] and 28 or 16
     h.UseJumpPower = true
-    h.JumpPower = states["Player:High Jump"] and 85 or 50
+    h.JumpPower =
+        states["Player:High Jump"] and 85 or 50
 end
 
-table.insert(connections,UIS.JumpRequest:Connect(function()
-    if states["Player:Infinite Jump"] then
-        local h = humanoid()
-        if h then h:ChangeState(Enum.HumanoidStateType.Jumping) end
-    end
-end))
+table.insert(connections,
+    UIS.JumpRequest:Connect(function()
+        if states["Player:Infinite Jump"] then
+            local h = humanoid()
+            if h then
+                h:ChangeState(
+                    Enum.HumanoidStateType.Jumping
+                )
+            end
+        end
+    end)
+)
 
-table.insert(connections,player.CharacterAdded:Connect(function()
-    task.wait(.5)
-    applyMovement()
-end))
+table.insert(connections,
+    player.CharacterAdded:Connect(function()
+        task.wait(.5)
+        applyMovement()
+    end)
+)
 
 -- Feature dispatcher
 local function applyFeature(category,option,enabled)
@@ -303,80 +544,152 @@ local function applyFeature(category,option,enabled)
         end
 
     elseif category == "Player" then
-        if option == "Speed" or option == "High Jump" then
+        if option == "Speed"
+            or option == "High Jump" then
             applyMovement()
+
         elseif option == "Infinite Jump" then
-            notify(enabled and "Infinite Jump ON" or "Infinite Jump OFF")
+            notify(
+                enabled and "Infinite Jump ON"
+                or "Infinite Jump OFF"
+            )
         else
-            notify(option .. " requires game integration")
+            notify(
+                option .. " requires game integration"
+            )
         end
 
     elseif category == "Misc" then
         if option == "Full Bright" then
-            Lighting.Brightness = enabled and 5 or original.brightness
-            Lighting.Ambient = enabled
-                and Color3.fromRGB(255,255,255) or original.ambient
+            Lighting.Brightness =
+                enabled and 5 or original.brightness
+            Lighting.Ambient =
+                enabled
+                and Color3.fromRGB(255,255,255)
+                or original.ambient
 
         elseif option == "Day Mode" then
-            Lighting.ClockTime = enabled and 12 or original.clock
+            Lighting.ClockTime =
+                enabled and 12 or original.clock
 
         elseif option == "Night Mode" then
-            Lighting.ClockTime = enabled and 0 or original.clock
+            Lighting.ClockTime =
+                enabled and 0 or original.clock
         else
             notify(option .. " not connected")
         end
 
     elseif category == "Teleport" then
         if not enabled then return end
+
         if option == "Teleport to Spawn" then
-            local spawnPart = workspace:FindFirstChildWhichIsA(
-                "SpawnLocation",true)
-            local root = player.Character and
-                player.Character:FindFirstChild("HumanoidRootPart")
+            local spawnPart =
+                workspace:FindFirstChildWhichIsA(
+                    "SpawnLocation",true
+                )
+
+            local root =
+                player.Character and
+                player.Character:FindFirstChild(
+                    "HumanoidRootPart"
+                )
+
             if spawnPart and root then
-                root.CFrame = spawnPart.CFrame * CFrame.new(0,4,0)
+                root.CFrame =
+                    spawnPart.CFrame * CFrame.new(0,4,0)
                 notify("Spawn teleport attempted")
             else
                 notify("Spawn location not found")
             end
         else
-            notify("Destination not configured: " .. option)
+            notify(
+                "Destination not configured: " .. option
+            )
         end
 
     elseif category == "Combat" then
-        notify(option .. " needs weapon or NPC integration")
+        notify(
+            option .. " needs weapon or NPC integration"
+        )
 
     elseif category == "Settings" then
-        notify(option .. (enabled and " ON" or " OFF"))
+        notify(
+            option .. (enabled and " ON" or " OFF")
+        )
     end
 end
 
 local tabs = {
-    {"⌂","Home"},{"⚔","Combat"},{"◉","ESP"},
-    {"♟","Player"},{"⌖","Teleport"},
-    {"⚒","Misc"},{"⚙","Settings"}
+    {"⌂","Home"},
+    {"⚔","Combat"},
+    {"◉","ESP"},
+    {"♟","Player"},
+    {"⌖","Teleport"},
+    {"⚒","Misc"},
+    {"⚙","Settings"}
 }
 
 local tabButtons = {}
 
 local options = {
-    Home = {"Enable Hub","Show Player Info","Enable Effects"},
-    Combat = {"Aimbot","Silent Aim","Target Lock",
-        "FOV Circle","Smooth Aim","Wall Check"},
-    ESP = {"Player ESP","Name","Distance",
-        "Boxes","Skeleton","Team Check (Enemy Only)"},
-    Player = {"Speed","High Jump","Infinite Jump",
-        "No Stamina","Anti Fall Damage"},
-    Teleport = {"Teleport to Spawn","Teleport to Shop",
-        "Teleport to Bank","Custom Location"},
-    Misc = {"Full Bright","Day Mode","Night Mode","FPS Boost"},
-    Settings = {"Show Notifications","Save Settings",
-        "Enable Keybinds"}
+    Home = {
+        "Enable Hub",
+        "Show Player Info",
+        "Enable Effects"
+    },
+
+    Combat = {
+        "Aimbot",
+        "Silent Aim",
+        "Target Lock",
+        "FOV Circle",
+        "Smooth Aim",
+        "Wall Check"
+    },
+
+    ESP = {
+        "Player ESP",
+        "Name",
+        "Distance",
+        "Boxes",
+        "Skeleton",
+        "Team Check (Enemy Only)"
+    },
+
+    Player = {
+        "Speed",
+        "High Jump",
+        "Infinite Jump",
+        "No Stamina",
+        "Anti Fall Damage"
+    },
+
+    Teleport = {
+        "Teleport to Spawn",
+        "Teleport to Shop",
+        "Teleport to Bank",
+        "Custom Location"
+    },
+
+    Misc = {
+        "Full Bright",
+        "Day Mode",
+        "Night Mode",
+        "FPS Boost"
+    },
+
+    Settings = {
+        "Show Notifications",
+        "Save Settings",
+        "Enable Keybinds"
+    }
 }
 
 local function makeToggle(category,option,y)
     local key = category .. ":" .. option
-    local row = panel(content,0,y,346,30,colors.row)
+    local row = panel(
+        content,0,y,346,30,colors.row
+    )
     round(row,5)
     text(row,option,11,0,270,30,12)
 
@@ -387,14 +700,19 @@ local function makeToggle(category,option,y)
     button.Parent = row
     round(button,12)
 
-    local dot = panel(button,3,2,16,16,colors.white)
+    local dot = panel(
+        button,3,2,16,16,colors.white
+    )
     round(dot,10)
 
     local function redraw()
         local on = states[key] == true
-        button.BackgroundColor3 = on and colors.purple
+        button.BackgroundColor3 =
+            on and colors.purple
             or Color3.fromRGB(56,60,70)
-        dot.Position = UDim2.fromOffset(on and 22 or 3,2)
+        dot.Position = UDim2.fromOffset(
+            on and 22 or 3,2
+        )
     end
 
     redraw()
@@ -414,11 +732,15 @@ local function showPage(name)
     end
 
     for tab,btn in pairs(tabButtons) do
-        btn.BackgroundColor3 = tab == name
-            and colors.selected or colors.panel
+        btn.BackgroundColor3 =
+            tab == name
+            and colors.selected
+            or colors.panel
     end
 
-    for i,option in ipairs(options[name] or {}) do
+    for i,option in ipairs(
+        options[name] or {}
+    ) do
         makeToggle(name,option,(i-1)*33)
     end
 end
@@ -427,7 +749,9 @@ for i,item in ipairs(tabs) do
     local symbol,name = item[1],item[2]
 
     local b = Instance.new("TextButton")
-    b.Position = UDim2.fromOffset(7,5+(i-1)*35)
+    b.Position = UDim2.fromOffset(
+        7,5+(i-1)*35
+    )
     b.Size = UDim2.fromOffset(132,31)
     b.BackgroundColor3 = colors.panel
     b.Text = ""
@@ -438,6 +762,7 @@ for i,item in ipairs(tabs) do
     text(b,name,37,0,90,31,12)
 
     tabButtons[name] = b
+
     b.MouseButton1Click:Connect(function()
         showPage(name)
     end)
@@ -446,18 +771,24 @@ end
 -- Close and minimize
 local close = headerButton("×",711,function()
     clearMarkers()
+    overlay:Destroy()
+
     for _,connection in ipairs(connections) do
         connection:Disconnect()
     end
+
     gui:Destroy()
 end)
 
 local minimized = false
+
 headerButton("−",680,function()
     minimized = not minimized
-    main.Size = minimized
+    main.Size =
+        minimized
         and UDim2.fromOffset(760,44)
         or UDim2.fromOffset(760,320)
+
     side.Visible = not minimized
     page.Visible = not minimized
     right.Visible = not minimized
@@ -468,7 +799,8 @@ local dragging = false
 local startMouse,startPosition
 
 header.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+    if input.UserInputType ==
+        Enum.UserInputType.MouseButton1 then
         dragging = true
         startMouse = input.Position
         startPosition = main.Position
@@ -476,29 +808,74 @@ header.InputBegan:Connect(function(input)
 end)
 
 header.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+    if input.UserInputType ==
+        Enum.UserInputType.MouseButton1 then
         dragging = false
     end
 end)
 
-table.insert(connections,UIS.InputChanged:Connect(function(input)
-    if dragging and input.UserInputType ==
-        Enum.UserInputType.MouseMovement then
-        local delta = input.Position-startMouse
-        main.Position = UDim2.new(
-            startPosition.X.Scale,startPosition.X.Offset+delta.X,
-            startPosition.Y.Scale,startPosition.Y.Offset+delta.Y
-        )
-    end
-end))
+table.insert(connections,
+    UIS.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType ==
+            Enum.UserInputType.MouseMovement then
+            local delta =
+                input.Position-startMouse
 
--- Refresh markers when characters change
-table.insert(connections,Players.PlayerAdded:Connect(function(p)
-    p.CharacterAdded:Connect(function()
-        task.wait(.5)
-        if gui.Parent then refreshESP() end
+            main.Position = UDim2.new(
+                startPosition.X.Scale,
+                startPosition.X.Offset+delta.X,
+                startPosition.Y.Scale,
+                startPosition.Y.Offset+delta.Y
+            )
+        end
     end)
-end))
+)
+
+-- Refresh markers for characters
+local function watchPlayer(p)
+    table.insert(connections,
+        p.CharacterAdded:Connect(function()
+            task.wait(.5)
+            if gui.Parent then
+                refreshESP()
+            end
+        end)
+    )
+
+    table.insert(connections,
+        p.CharacterRemoving:Connect(function()
+            task.defer(function()
+                if gui.Parent then
+                    refreshESP()
+                end
+            end)
+        end)
+    )
+end
+
+for _,p in ipairs(Players:GetPlayers()) do
+    watchPlayer(p)
+end
+
+table.insert(connections,
+    Players.PlayerAdded:Connect(function(p)
+        watchPlayer(p)
+        task.wait(.5)
+        if gui.Parent then
+            refreshESP()
+        end
+    end)
+)
+
+table.insert(connections,
+    Players.PlayerRemoving:Connect(function()
+        task.defer(function()
+            if gui.Parent then
+                refreshESP()
+            end
+        end)
+    end)
+)
 
 showPage("ESP")
-notify("Hub V2 loaded")
+notify("Hub V2 with Box + Skeleton loaded")
