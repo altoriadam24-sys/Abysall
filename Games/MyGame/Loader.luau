@@ -552,6 +552,140 @@ local function updateAim(dt)
     end
 end
 
+-- TELEPORT SYSTEM V4.2
+-- Automatically searches for map locations
+
+local teleportLocations = {
+    ["Teleport to Gun Shop"] = {
+        "Gun Shop",
+        "GunShop",
+        "Gun Store",
+        "GunStore",
+        "Gun Dealer",
+        "GunDealer"
+    },
+
+    ["Teleport to Big Bank"] = {
+        "Big Bank",
+        "BigBank",
+        "Main Bank",
+        "MainBank"
+    },
+
+    ["Teleport to Shop"] = {
+        "Gun Shop",
+        "GunShop",
+        "Gun Store",
+        "GunStore"
+    },
+
+    ["Teleport to Bank"] = {
+        "Big Bank",
+        "BigBank",
+        "Main Bank",
+        "MainBank"
+    }
+}
+
+local function normalizeName(name)
+    return string.lower(
+        string.gsub(name, "[^%w]", "")
+    )
+end
+
+local function findTeleportLocation(option)
+    local names = teleportLocations[option]
+
+    if not names then
+        return nil
+    end
+
+    local bestObject = nil
+    local bestScore = 0
+
+    for _,obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("Model") or obj:IsA("BasePart") then
+            local objectName = normalizeName(obj.Name)
+
+            for _,wanted in ipairs(names) do
+                local searchName = normalizeName(wanted)
+                local score = 0
+
+                if objectName == searchName then
+                    score = 100
+                elseif #searchName >= 5
+                    and string.find(
+                        objectName,
+                        searchName,
+                        1,
+                        true
+                    ) then
+                    score = 50
+                end
+
+                if score > bestScore then
+                    bestObject = obj
+                    bestScore = score
+                end
+            end
+        end
+    end
+
+    return bestObject
+end
+
+local function teleportToLocation(option)
+    local character = LP.Character
+
+    if not character then
+        notify("Character not found")
+        return
+    end
+
+    local root = character:FindFirstChild(
+        "HumanoidRootPart"
+    )
+
+    if not root then
+        notify("HumanoidRootPart not found")
+        return
+    end
+
+    local destination = findTeleportLocation(option)
+
+    if not destination then
+        notify("Location not found: " .. option)
+        return
+    end
+
+    local targetPosition
+
+    if destination:IsA("Model") then
+        local pivot = destination:GetPivot()
+        local _, size = destination:GetBoundingBox()
+
+        targetPosition =
+            pivot.Position + Vector3.new(
+                0,
+                size.Y / 2 + 5,
+                0
+            )
+    else
+        targetPosition =
+            destination.Position + Vector3.new(
+                0,
+                destination.Size.Y / 2 + 5,
+                0
+            )
+    end
+
+    character:PivotTo(
+        CFrame.new(targetPosition)
+    )
+
+    notify("Teleport attempted: " .. option)
+end
+
 -- Movement and lighting
 local function getHumanoid()
     local char = LP.Character
@@ -622,17 +756,40 @@ local function applyFeature(category,option,on)
             notify(option.." not connected")
         end
 
+   
     elseif category == "Teleport" and on then
         if option == "Teleport to Spawn" then
             local spawn = workspace:FindFirstChildWhichIsA(
-                "SpawnLocation",true)
+                "SpawnLocation",
+                true
+            )
+
             local root = LP.Character and
-                LP.Character:FindFirstChild("HumanoidRootPart")
+                LP.Character:FindFirstChild(
+                    "HumanoidRootPart"
+                )
+
             if spawn and root then
                 root.CFrame =
-                    spawn.CFrame*CFrame.new(0,4,0)
+                    spawn.CFrame * CFrame.new(0, 4, 0)
+
+                notify("Spawn teleport attempted")
             else
                 notify("Spawn not found")
+            end
+
+        elseif option == "Teleport to Shop"
+            or option == "Teleport to Bank"
+            or option == "Teleport to Gun Shop"
+            or option == "Teleport to Big Bank" then
+
+            teleportToLocation(option)
+
+        else
+            notify("Destination not configured")
+        end
+    end
+
             end
         else
             notify("Destination not configured")
