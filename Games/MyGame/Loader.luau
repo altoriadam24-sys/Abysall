@@ -1,420 +1,504 @@
 
--- BRONX STREETS HUB
--- Custom menu design
+-- BRONX STREETS HUB V2
+-- Single-file menu with local features
 
 local Players = game:GetService("Players")
+local Lighting = game:GetService("Lighting")
+local UIS = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
+
 local player = Players.LocalPlayer
+if not player then return end
 
 if game.GameId ~= 10763808155 then
-    warn("Wrong game!")
+    warn("Wrong game ID: " .. tostring(game.GameId))
     return
 end
 
-local playerGui = player:WaitForChild("PlayerGui")
-local old = playerGui:FindFirstChild("BronxStreetsHub")
-if old then old:Destroy() end
+local pg = player:WaitForChild("PlayerGui")
+local previous = pg:FindFirstChild("BronxStreetsHub")
+if previous then previous:Destroy() end
 
-local C = {
-    bg = Color3.fromRGB(8, 10, 15),
-    panel = Color3.fromRGB(13, 16, 22),
-    row = Color3.fromRGB(20, 23, 29),
-    selected = Color3.fromRGB(43, 47, 56),
-    blue = Color3.fromRGB(48, 143, 255),
-    purple = Color3.fromRGB(110, 46, 245),
-    white = Color3.fromRGB(245, 245, 250),
-    muted = Color3.fromRGB(170, 175, 187),
-    green = Color3.fromRGB(0, 255, 65)
+local connections = {}
+local states = {}
+local markers = {}
+local original = {
+    clock = Lighting.ClockTime,
+    brightness = Lighting.Brightness,
+    ambient = Lighting.Ambient
+}
+
+local colors = {
+    bg = Color3.fromRGB(9,11,17),
+    panel = Color3.fromRGB(15,18,25),
+    row = Color3.fromRGB(23,26,34),
+    selected = Color3.fromRGB(45,49,60),
+    blue = Color3.fromRGB(42,145,255),
+    purple = Color3.fromRGB(116,52,245),
+    white = Color3.fromRGB(245,245,250),
+    muted = Color3.fromRGB(160,165,180),
+    green = Color3.fromRGB(0,255,70)
 }
 
 local gui = Instance.new("ScreenGui")
 gui.Name = "BronxStreetsHub"
 gui.ResetOnSpawn = false
 gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-gui.Parent = playerGui
+gui.Parent = pg
 
-local function corner(obj, radius)
+local function round(obj, r)
     local c = Instance.new("UICorner")
-    c.CornerRadius = UDim.new(0, radius)
+    c.CornerRadius = UDim.new(0,r)
     c.Parent = obj
 end
 
-local function stroke(obj, color, thickness)
+local function border(obj,col,width)
     local s = Instance.new("UIStroke")
-    s.Color = color
-    s.Thickness = thickness
+    s.Color = col
+    s.Thickness = width or 1
     s.Parent = obj
-    return s
 end
 
-local function frame(parent, x, y, w, h, color)
+local function panel(parent,x,y,w,h,color)
     local f = Instance.new("Frame")
-    f.Position = UDim2.fromOffset(x, y)
-    f.Size = UDim2.fromOffset(w, h)
+    f.Position = UDim2.fromOffset(x,y)
+    f.Size = UDim2.fromOffset(w,h)
     f.BackgroundColor3 = color
     f.BorderSizePixel = 0
     f.Parent = parent
     return f
 end
 
-local function label(parent, text, x, y, w, h, size, color)
-    local l = Instance.new("TextLabel")
-    l.Position = UDim2.fromOffset(x, y)
-    l.Size = UDim2.fromOffset(w, h)
-    l.BackgroundTransparency = 1
-    l.Text = text
-    l.TextColor3 = color or C.white
-    l.TextSize = size
-    l.Font = Enum.Font.GothamBold
-    l.TextXAlignment = Enum.TextXAlignment.Left
-    l.Parent = parent
-    return l
+local function text(parent,value,x,y,w,h,size,color)
+    local t = Instance.new("TextLabel")
+    t.Position = UDim2.fromOffset(x,y)
+    t.Size = UDim2.fromOffset(w,h)
+    t.BackgroundTransparency = 1
+    t.Text = value
+    t.TextSize = size
+    t.TextColor3 = color or colors.white
+    t.Font = Enum.Font.GothamBold
+    t.TextXAlignment = Enum.TextXAlignment.Left
+    t.Parent = parent
+    return t
 end
 
--- Main window
-local main = frame(gui, 0, 0, 760, 320, C.bg)
-main.AnchorPoint = Vector2.new(0.5, 0.5)
-main.Position = UDim2.fromScale(0.5, 0.43)
-corner(main, 13)
-stroke(main, C.blue, 1.5)
+local main = panel(gui,0,0,760,320,colors.bg)
+main.AnchorPoint = Vector2.new(.5,.5)
+main.Position = UDim2.fromScale(.5,.43)
+round(main,13)
+border(main,colors.blue,1.6)
 
 local scale = Instance.new("UIScale")
 scale.Parent = main
 
-local function updateScale()
-    local camera = workspace.CurrentCamera
-    if camera then
-        local v = camera.ViewportSize
-        scale.Scale = math.min(1, (v.X - 24) / 760,
-            (v.Y - 24) / 320)
+local function resize()
+    local cam = workspace.CurrentCamera
+    if cam then
+        local v = cam.ViewportSize
+        scale.Scale = math.min(1,(v.X-20)/760,(v.Y-20)/320)
     end
 end
+resize()
 
-updateScale()
-if workspace.CurrentCamera then
-    workspace.CurrentCamera:GetPropertyChangedSignal(
-        "ViewportSize"
-    ):Connect(updateScale)
+local header = panel(main,6,6,748,37,colors.panel)
+round(header,7)
+text(header,"🔫 Bronx Streets Hub | Free 350K",
+    12,1,610,34,18)
+
+local function headerButton(symbol,x,callback)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.fromOffset(28,29)
+    b.Position = UDim2.fromOffset(x,3)
+    b.BackgroundTransparency = 1
+    b.Text = symbol
+    b.TextSize = 23
+    b.TextColor3 = colors.white
+    b.Parent = header
+    b.MouseButton1Click:Connect(callback)
+    return b
 end
 
--- Top line
-local topLine = frame(main, 3, 2, 754, 2, C.blue)
+local side = panel(main,12,51,146,256,colors.panel)
+round(side,9)
 
-local header = frame(main, 5, 6, 750, 37, C.panel)
-corner(header, 7)
+local page = panel(main,170,51,370,256,colors.panel)
+round(page,9)
 
-label(header, "🔫  Bronx Streets Hub | Free 350K",
-    13, 0, 590, 36, 19, C.white)
+local right = panel(main,550,51,198,256,colors.bg)
+round(right,9)
 
-local close = Instance.new("TextButton")
-close.Size = UDim2.fromOffset(29, 28)
-close.Position = UDim2.fromOffset(711, 4)
-close.BackgroundTransparency = 1
-close.Text = "×"
-close.TextSize = 24
-close.TextColor3 = C.white
-close.Parent = header
-
-close.MouseButton1Click:Connect(function()
-    gui:Destroy()
-end)
-
-local minimize = Instance.new("TextButton")
-minimize.Size = UDim2.fromOffset(25, 28)
-minimize.Position = UDim2.fromOffset(681, 4)
-minimize.BackgroundTransparency = 1
-minimize.Text = "−"
-minimize.TextSize = 23
-minimize.TextColor3 = C.white
-minimize.Parent = header
-
-local minimized = false
-minimize.MouseButton1Click:Connect(function()
-    minimized = not minimized
-    main.Size = minimized
-        and UDim2.fromOffset(760, 44)
-        or UDim2.fromOffset(760, 320)
-    for _, child in ipairs(main:GetChildren()) do
-        if child:IsA("Frame") and child ~= header
-            and child ~= topLine then
-            child.Visible = not minimized
-        end
-    end
-end)
-
--- Sidebar
-local sidebar = frame(main, 12, 50, 146, 257, C.panel)
-corner(sidebar, 10)
-stroke(sidebar, Color3.fromRGB(35, 39, 48), 1)
-
-local tabs = {
-    {"⌂", "Home"},
-    {"⚔", "Combat"},
-    {"◉", "ESP"},
-    {"♟", "Player"},
-    {"⌖", "Teleport"},
-    {"⚒", "Misc"},
-    {"⚙", "Settings"}
-}
-
-local page = frame(main, 170, 50, 370, 257, C.panel)
-corner(page, 10)
-stroke(page, Color3.fromRGB(32, 37, 46), 1)
-
-local pageTitle = label(page, "ESP", 15, 7, 320, 30, 17)
-local content = frame(page, 12, 42, 346, 205, C.panel)
+local pageTitle = text(page,"Home",15,7,320,26,17)
+local content = panel(page,12,41,346,204,colors.panel)
 content.BackgroundTransparency = 1
 
+local status = text(right,"",8,225,185,26,10,colors.muted)
+status.TextWrapped = true
+status.TextXAlignment = Enum.TextXAlignment.Center
+
+local function notify(message)
+    status.Text = message
+    print("[Bronx Hub] " .. message)
+end
+
+-- Player preview
+local logo = text(right,"BRONX",12,3,175,29,24)
+logo.TextXAlignment = Enum.TextXAlignment.Center
+logo.TextStrokeTransparency = 0
+
+local logo2 = text(right,"STREETS",12,29,175,28,23,
+    Color3.fromRGB(230,35,45))
+logo2.TextXAlignment = Enum.TextXAlignment.Center
+
+local previewLabel = text(right,"PLAYER PREVIEW",
+    10,90,180,22,13,colors.green)
+previewLabel.TextXAlignment = Enum.TextXAlignment.Center
+
+local avatarBox = panel(right,54,119,90,95,
+    Color3.fromRGB(10,20,14))
+border(avatarBox,colors.green,2)
+
+local avatar = Instance.new("ImageLabel")
+avatar.Size = UDim2.fromScale(1,1)
+avatar.BackgroundTransparency = 1
+avatar.ScaleType = Enum.ScaleType.Fit
+avatar.Parent = avatarBox
+
+task.spawn(function()
+    local ok,url = pcall(function()
+        return Players:GetUserThumbnailAsync(
+            player.UserId,
+            Enum.ThumbnailType.AvatarThumbnail,
+            Enum.ThumbnailSize.Size150x150
+        )
+    end)
+    if ok and gui.Parent then avatar.Image = url end
+end)
+
+-- ESP objects
+local function clearMarkers()
+    for _,obj in pairs(markers) do
+        if obj then obj:Destroy() end
+    end
+    table.clear(markers)
+end
+
+local function isEnemy(target)
+    if target == player then return false end
+    if states["ESP:Team Check (Enemy Only)"] then
+        if player.Team and target.Team then
+            return player.Team ~= target.Team
+        end
+    end
+    return true
+end
+
+local function createMarker(target)
+    if not target.Character or not isEnemy(target) then return end
+    local char = target.Character
+    local head = char:FindFirstChild("Head")
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not head or not hum or hum.Health <= 0 then return end
+
+    if states["ESP:Player ESP"] or states["ESP:Boxes"] then
+        local h = Instance.new("Highlight")
+        h.Name = "BronxESP"
+        h.Adornee = char
+        h.FillColor = Color3.fromRGB(255,45,55)
+        h.FillTransparency = states["ESP:Player ESP"] and .65 or 1
+        h.OutlineColor = colors.green
+        h.OutlineTransparency =
+            states["ESP:Boxes"] and 0 or 1
+        h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        h.Parent = char
+        table.insert(markers,h)
+    end
+
+    if states["ESP:Name"] or states["ESP:Distance"] then
+        local bb = Instance.new("BillboardGui")
+        bb.Name = "BronxInfo"
+        bb.Adornee = head
+        bb.Size = UDim2.fromOffset(160,42)
+        bb.StudsOffset = Vector3.new(0,3,0)
+        bb.AlwaysOnTop = true
+        bb.Parent = pg
+
+        local lbl = text(bb,"",0,0,160,42,13,colors.green)
+        lbl.TextXAlignment = Enum.TextXAlignment.Center
+        lbl.TextStrokeTransparency = .2
+        table.insert(markers,bb)
+
+        local function refresh()
+            if not bb.Parent then return end
+            local bits = {}
+            if states["ESP:Name"] then
+                table.insert(bits,target.DisplayName)
+            end
+            if states["ESP:Distance"] then
+                local myRoot = player.Character and
+                    player.Character:FindFirstChild("HumanoidRootPart")
+                local root = char:FindFirstChild("HumanoidRootPart")
+                if myRoot and root then
+                    local d = (root.Position-myRoot.Position).Magnitude
+                    table.insert(bits,string.format("%.0fm",d))
+                end
+            end
+            lbl.Text = table.concat(bits," | ")
+        end
+        table.insert(connections,
+            RunService.Heartbeat:Connect(refresh))
+    end
+end
+
+local function refreshESP()
+    clearMarkers()
+    for _,target in ipairs(Players:GetPlayers()) do
+        createMarker(target)
+    end
+end
+
+local espNames = {
+    ["Player ESP"]=true,["Name"]=true,
+    ["Distance"]=true,["Boxes"]=true,
+    ["Team Check (Enemy Only)"]=true
+}
+
+-- Local movement
+local function humanoid()
+    local c = player.Character
+    return c and c:FindFirstChildOfClass("Humanoid")
+end
+
+local function applyMovement()
+    local h = humanoid()
+    if not h then return end
+    h.WalkSpeed = states["Player:Speed"] and 28 or 16
+    h.UseJumpPower = true
+    h.JumpPower = states["Player:High Jump"] and 85 or 50
+end
+
+table.insert(connections,UIS.JumpRequest:Connect(function()
+    if states["Player:Infinite Jump"] then
+        local h = humanoid()
+        if h then h:ChangeState(Enum.HumanoidStateType.Jumping) end
+    end
+end))
+
+table.insert(connections,player.CharacterAdded:Connect(function()
+    task.wait(.5)
+    applyMovement()
+end))
+
+-- Feature dispatcher
+local function applyFeature(category,option,enabled)
+    local key = category .. ":" .. option
+    states[key] = enabled
+
+    if category == "ESP" then
+        if espNames[option] then
+            refreshESP()
+        else
+            notify(option .. " needs additional game data")
+        end
+
+    elseif category == "Player" then
+        if option == "Speed" or option == "High Jump" then
+            applyMovement()
+        elseif option == "Infinite Jump" then
+            notify(enabled and "Infinite Jump ON" or "Infinite Jump OFF")
+        else
+            notify(option .. " requires game integration")
+        end
+
+    elseif category == "Misc" then
+        if option == "Full Bright" then
+            Lighting.Brightness = enabled and 5 or original.brightness
+            Lighting.Ambient = enabled
+                and Color3.fromRGB(255,255,255) or original.ambient
+
+        elseif option == "Day Mode" then
+            Lighting.ClockTime = enabled and 12 or original.clock
+
+        elseif option == "Night Mode" then
+            Lighting.ClockTime = enabled and 0 or original.clock
+        else
+            notify(option .. " not connected")
+        end
+
+    elseif category == "Teleport" then
+        if not enabled then return end
+        if option == "Teleport to Spawn" then
+            local spawnPart = workspace:FindFirstChildWhichIsA(
+                "SpawnLocation",true)
+            local root = player.Character and
+                player.Character:FindFirstChild("HumanoidRootPart")
+            if spawnPart and root then
+                root.CFrame = spawnPart.CFrame * CFrame.new(0,4,0)
+                notify("Spawn teleport attempted")
+            else
+                notify("Spawn location not found")
+            end
+        else
+            notify("Destination not configured: " .. option)
+        end
+
+    elseif category == "Combat" then
+        notify(option .. " needs weapon or NPC integration")
+
+    elseif category == "Settings" then
+        notify(option .. (enabled and " ON" or " OFF"))
+    end
+end
+
+local tabs = {
+    {"⌂","Home"},{"⚔","Combat"},{"◉","ESP"},
+    {"♟","Player"},{"⌖","Teleport"},
+    {"⚒","Misc"},{"⚙","Settings"}
+}
+
 local tabButtons = {}
-local selectedTab = "ESP"
 
-local function makeToggle(text, y, default, callback)
-    local bg = frame(content, 0, y, 346, 30, C.row)
-    corner(bg, 5)
-    stroke(bg, Color3.fromRGB(38, 42, 50), 0.7)
+local options = {
+    Home = {"Enable Hub","Show Player Info","Enable Effects"},
+    Combat = {"Aimbot","Silent Aim","Target Lock",
+        "FOV Circle","Smooth Aim","Wall Check"},
+    ESP = {"Player ESP","Name","Distance",
+        "Boxes","Skeleton","Team Check (Enemy Only)"},
+    Player = {"Speed","High Jump","Infinite Jump",
+        "No Stamina","Anti Fall Damage"},
+    Teleport = {"Teleport to Spawn","Teleport to Shop",
+        "Teleport to Bank","Custom Location"},
+    Misc = {"Full Bright","Day Mode","Night Mode","FPS Boost"},
+    Settings = {"Show Notifications","Save Settings",
+        "Enable Keybinds"}
+}
 
-    label(bg, text, 11, 0, 268, 30, 12, C.white)
+local function makeToggle(category,option,y)
+    local key = category .. ":" .. option
+    local row = panel(content,0,y,346,30,colors.row)
+    round(row,5)
+    text(row,option,11,0,270,30,12)
 
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.fromOffset(39, 20)
-    btn.Position = UDim2.fromOffset(295, 5)
-    btn.BackgroundColor3 = default
-        and C.purple or Color3.fromRGB(54, 58, 65)
-    btn.Text = ""
-    btn.Parent = bg
-    corner(btn, 12)
+    local button = Instance.new("TextButton")
+    button.Position = UDim2.fromOffset(293,5)
+    button.Size = UDim2.fromOffset(41,20)
+    button.Text = ""
+    button.Parent = row
+    round(button,12)
 
-    local circle = frame(btn, default and 21 or 3,
-        2, 16, 16, C.white)
-    corner(circle, 10)
+    local dot = panel(button,3,2,16,16,colors.white)
+    round(dot,10)
 
-    local enabled = default
+    local function redraw()
+        local on = states[key] == true
+        button.BackgroundColor3 = on and colors.purple
+            or Color3.fromRGB(56,60,70)
+        dot.Position = UDim2.fromOffset(on and 22 or 3,2)
+    end
 
-    btn.MouseButton1Click:Connect(function()
-        enabled = not enabled
-        TweenService:Create(btn, TweenInfo.new(0.15), {
-            BackgroundColor3 = enabled and C.purple
-                or Color3.fromRGB(54, 58, 65)
-        }):Play()
-        TweenService:Create(circle, TweenInfo.new(0.15), {
-            Position = UDim2.fromOffset(
-                enabled and 21 or 3, 2)
-        }):Play()
+    redraw()
 
-        if callback then callback(enabled) end
+    button.MouseButton1Click:Connect(function()
+        local newValue = not states[key]
+        applyFeature(category,option,newValue)
+        redraw()
     end)
 end
 
-local states = {}
--- REAL FEATURES
-
-local Lighting = game:GetService("Lighting")
-
-
-local originalBrightness = Lighting.Brightness
-local originalAmbient = Lighting.Ambient
-local originalClock = Lighting.ClockTime
-
-local function applyFeature(category, option, enabled)
-    if category == "Misc" then
-
-        if option == "Full Bright" then
-            Lighting.Brightness = enabled
-                and 5 or originalBrightness
-
-            Lighting.Ambient = enabled
-                and Color3.fromRGB(255, 255, 255)
-                or originalAmbient
-
-        elseif option == "Day Mode" then
-            Lighting.ClockTime = enabled
-                and 12 or originalClock
-
-        elseif option == "Night Mode" then
-            Lighting.ClockTime = enabled
-                and 0 or originalClock
-        end
-    end
-end
-
-
 local function showPage(name)
-    selectedTab = name
     pageTitle.Text = name
 
-
-    for _, item in ipairs(content:GetChildren()) do
+    for _,item in ipairs(content:GetChildren()) do
         item:Destroy()
     end
 
-    for tabName, btn in pairs(tabButtons) do
-        btn.BackgroundColor3 = tabName == name
-            and C.selected or C.panel
+    for tab,btn in pairs(tabButtons) do
+        btn.BackgroundColor3 = tab == name
+            and colors.selected or colors.panel
     end
 
-    local options = {}
-
-    if name == "ESP" then
-        options = {
-            "Player ESP",
-            "Name",
-            "Distance",
-            "Boxes",
-            "Skeleton",
-            "Team Check (Enemy Only)"
-        }
-    elseif name == "Combat" then
-        options = {
-            "Aimbot",
-            "Silent Aim",
-            "Target Lock",
-            "FOV Circle",
-            "Smooth Aim",
-            "Wall Check"
-        }
-    elseif name == "Player" then
-        options = {
-            "Speed",
-            "High Jump",
-            "Infinite Jump",
-            "No Stamina",
-            "Anti Fall Damage"
-        }
-    elseif name == "Teleport" then
-        options = {
-            "Teleport to Spawn",
-            "Teleport to Shop",
-            "Teleport to Bank",
-            "Custom Location"
-        }
-    elseif name == "Misc" then
-        options = {
-            "Full Bright",
-            "Day Mode",
-            "Night Mode",
-            "FPS Boost"
-        }
-    elseif name == "Settings" then
-        options = {
-            "Show Notifications",
-            "Save Settings",
-            "Enable Keybinds"
-        }
-    else
-        options = {
-            "Enable Hub",
-            "Show Player Info",
-            "Enable Effects"
-        }
+    for i,option in ipairs(options[name] or {}) do
+        makeToggle(name,option,(i-1)*33)
     end
-
-    for i, option in ipairs(options) do
-        local key = name .. ":" .. option
-        makeToggle(option, (i - 1) * 33,
-            states[key] or false,
-          
-function(value)
-    states[key] = value
-    applyFeature(name, option, value)
-end)
-
 end
 
-for i, item in ipairs(tabs) do
-    local symbol, name = item[1], item[2]
+for i,item in ipairs(tabs) do
+    local symbol,name = item[1],item[2]
 
-    local btn = Instance.new("TextButton")
-    btn.Position = UDim2.fromOffset(7, 5 + (i-1)*35)
-    btn.Size = UDim2.fromOffset(132, 31)
-    btn.BackgroundColor3 = C.panel
-    btn.Text = ""
-    btn.Parent = sidebar
-    corner(btn, 6)
+    local b = Instance.new("TextButton")
+    b.Position = UDim2.fromOffset(7,5+(i-1)*35)
+    b.Size = UDim2.fromOffset(132,31)
+    b.BackgroundColor3 = colors.panel
+    b.Text = ""
+    b.Parent = side
+    round(b,6)
 
-    label(btn, symbol, 10, 0, 23, 31, 18, C.white)
-    label(btn, name, 37, 0, 88, 31, 12, C.white)
+    text(b,symbol,10,0,24,31,17)
+    text(b,name,37,0,90,31,12)
 
-    tabButtons[name] = btn
-
-    btn.MouseButton1Click:Connect(function()
+    tabButtons[name] = b
+    b.MouseButton1Click:Connect(function()
         showPage(name)
     end)
 end
 
--- Right-side player preview
-local right = frame(main, 550, 50, 198, 257, C.bg)
-corner(right, 9)
-
-local logo = label(right, "BRONX", 18, 0,
-    170, 32, 26, Color3.fromRGB(255, 255, 255))
-logo.TextXAlignment = Enum.TextXAlignment.Center
-logo.TextStrokeColor3 = Color3.fromRGB(160, 0, 0)
-logo.TextStrokeTransparency = 0
-
-local logo2 = label(right, "STREETS", 15, 27,
-    172, 28, 25, Color3.fromRGB(220, 30, 40))
-logo2.TextXAlignment = Enum.TextXAlignment.Center
-logo2.TextStrokeTransparency = 0
-
-local previewName = label(right,
-    "Player [125m]", 20, 91, 165, 25, 14, C.green)
-previewName.TextXAlignment = Enum.TextXAlignment.Center
-
-local avatarBox = frame(right, 55, 130,
-    90, 105, Color3.fromRGB(10, 20, 13))
-stroke(avatarBox, C.green, 2)
-
-local avatar = Instance.new("ImageLabel")
-avatar.BackgroundTransparency = 1
-avatar.Size = UDim2.fromScale(1, 1)
-avatar.ScaleType = Enum.ScaleType.Fit
-avatar.Parent = avatarBox
-
-local success, thumbnail = pcall(function()
-    return Players:GetUserThumbnailAsync(
-        player.UserId,
-        Enum.ThumbnailType.AvatarThumbnail,
-        Enum.ThumbnailSize.Size150x150
-    )
+-- Close and minimize
+local close = headerButton("×",711,function()
+    clearMarkers()
+    for _,connection in ipairs(connections) do
+        connection:Disconnect()
+    end
+    gui:Destroy()
 end)
 
-if success then
-    avatar.Image = thumbnail
-end
+local minimized = false
+headerButton("−",680,function()
+    minimized = not minimized
+    main.Size = minimized
+        and UDim2.fromOffset(760,44)
+        or UDim2.fromOffset(760,320)
+    side.Visible = not minimized
+    page.Visible = not minimized
+    right.Visible = not minimized
+end)
 
-showPage("ESP")
-
--- Drag window with header
+-- Dragging
 local dragging = false
-local startPos, startInput
+local startMouse,startPosition
 
 header.InputBegan:Connect(function(input)
-    if input.UserInputType ==
-        Enum.UserInputType.MouseButton1 then
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
         dragging = true
-        startInput = input.Position
-        startPos = main.Position
+        startMouse = input.Position
+        startPosition = main.Position
     end
 end)
 
 header.InputEnded:Connect(function(input)
-    if input.UserInputType ==
-        Enum.UserInputType.MouseButton1 then
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
         dragging = false
     end
 end)
 
-game:GetService("UserInputService").InputChanged:Connect(
-    function(input)
-        if dragging and input.UserInputType ==
-            Enum.UserInputType.MouseMovement then
-            local delta = input.Position - startInput
-            main.Position = UDim2.new(
-                startPos.X.Scale,
-                startPos.X.Offset + delta.X,
-                startPos.Y.Scale,
-                startPos.Y.Offset + delta.Y
-            )
-        end
+table.insert(connections,UIS.InputChanged:Connect(function(input)
+    if dragging and input.UserInputType ==
+        Enum.UserInputType.MouseMovement then
+        local delta = input.Position-startMouse
+        main.Position = UDim2.new(
+            startPosition.X.Scale,startPosition.X.Offset+delta.X,
+            startPosition.Y.Scale,startPosition.Y.Offset+delta.Y
+        )
     end
-)
+end))
+
+-- Refresh markers when characters change
+table.insert(connections,Players.PlayerAdded:Connect(function(p)
+    p.CharacterAdded:Connect(function()
+        task.wait(.5)
+        if gui.Parent then refreshESP() end
+    end)
+end))
+
+showPage("ESP")
+notify("Hub V2 loaded")
