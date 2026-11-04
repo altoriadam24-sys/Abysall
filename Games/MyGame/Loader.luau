@@ -206,10 +206,42 @@ local function makeToggle(text, y, default, callback)
 end
 
 local states = {}
+-- REAL FEATURES
+
+local Lighting = game:GetService("Lighting")
+
+
+local originalBrightness = Lighting.Brightness
+local originalAmbient = Lighting.Ambient
+local originalClock = Lighting.ClockTime
+
+local function applyFeature(category, option, enabled)
+    if category == "Misc" then
+
+        if option == "Full Bright" then
+            Lighting.Brightness = enabled
+                and 5 or originalBrightness
+
+            Lighting.Ambient = enabled
+                and Color3.fromRGB(255, 255, 255)
+                or originalAmbient
+
+        elseif option == "Day Mode" then
+            Lighting.ClockTime = enabled
+                and 12 or originalClock
+
+        elseif option == "Night Mode" then
+            Lighting.ClockTime = enabled
+                and 0 or originalClock
+        end
+    end
+end
+
 
 local function showPage(name)
     selectedTab = name
     pageTitle.Text = name
+
 
     for _, item in ipairs(content:GetChildren()) do
         item:Destroy()
@@ -280,10 +312,12 @@ local function showPage(name)
         local key = name .. ":" .. option
         makeToggle(option, (i - 1) * 33,
             states[key] or false,
-            function(value)
-                states[key] = value
-            end)
-    end
+          
+function(value)
+    states[key] = value
+    applyFeature(name, option, value)
+end)
+
 end
 
 for i, item in ipairs(tabs) do
