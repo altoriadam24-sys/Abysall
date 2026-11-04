@@ -44,14 +44,52 @@ button.TextScaled = true
 button.Text = "ESP: OFF"
 button.Parent = frame
 
+
+local Players = game:GetService("Players")
 local espEnabled = false
+local highlights = {}
+
+local function updateESP()
+    for _, highlight in pairs(highlights) do
+        highlight:Destroy()
+    end
+    table.clear(highlights)
+
+    if not espEnabled then
+        return
+    end
+
+    for _, target in ipairs(Players:GetPlayers()) do
+        if target ~= Players.LocalPlayer then
+            local character = target.Character
+            if character then
+                local highlight = Instance.new("Highlight")
+                highlight.Name = "MyGameESP"
+                highlight.Adornee = character
+                highlight.FillColor = Color3.fromRGB(255, 0, 0)
+                highlight.FillTransparency = 0.5
+                highlight.OutlineColor = Color3.new(1, 1, 1)
+                highlight.DepthMode =
+                    Enum.HighlightDepthMode.AlwaysOnTop
+                highlight.Parent = character
+                table.insert(highlights, highlight)
+            end
+        end
+    end
+end
 
 button.MouseButton1Click:Connect(function()
     espEnabled = not espEnabled
-
-    if espEnabled then
-        button.Text = "ESP: ON"
-    else
-        button.Text = "ESP: OFF"
-    end
+    button.Text = espEnabled and "ESP: ON" or "ESP: OFF"
+    updateESP()
 end)
+
+Players.PlayerAdded:Connect(function(target)
+    target.CharacterAdded:Connect(function()
+        if espEnabled then
+            task.wait(0.5)
+            updateESP()
+        end
+    end)
+end)
+
