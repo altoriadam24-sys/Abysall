@@ -1,20 +1,23 @@
 
--- BRONX STREETS HUB V4.1
--- Complete menu / corrected FOV targeting
+-- BRONX STREETS HUB V4.2
+-- Full menu with updated teleport system
 
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
 local RS = game:GetService("RunService")
 local Lighting = game:GetService("Lighting")
-local LP = Players.LocalPlayer
 
+local LP = Players.LocalPlayer
 if not LP then return end
-if game.GameId ~= 10763808155 then
-    warn("Incorrect GameId:",game.GameId)
+
+local GAME_ID = 10763808155
+
+if game.GameId ~= GAME_ID then
+    warn("Incorrect GameId:", game.GameId)
     return
 end
 
--- Clean up an earlier execution
+-- Remove previous execution
 if _G.BronxHubCleanup then
     pcall(_G.BronxHubCleanup)
 end
@@ -22,8 +25,9 @@ end
 local pg = LP:WaitForChild("PlayerGui")
 local links = {}
 local drawings = {}
-local state = {}
 local targets = {}
+local state = {}
+
 local alive = true
 local held = false
 local binding = false
@@ -31,8 +35,8 @@ local selectedKey = Enum.UserInputType.MouseButton2
 local keyName = "Right Mouse"
 local smoothness = 5
 local fovRadius = 150
-local selectedPage = "ESP"
-local activeSlider = nil
+local lockedTarget = nil
+
 local oldLight = {
     brightness = Lighting.Brightness,
     ambient = Lighting.Ambient,
@@ -52,7 +56,7 @@ local color = {
     red = Color3.fromRGB(255,55,65)
 }
 
-local function connect(signal, fn)
+local function connect(signal,fn)
     local c = signal:Connect(fn)
     table.insert(links,c)
     return c
@@ -102,7 +106,7 @@ local function outline(obj,c,width)
     })
 end
 
--- Main interface
+-- GUI
 local gui = ui("ScreenGui",pg,{
     Name = "BronxStreetsHub",
     ResetOnSpawn = false,
@@ -123,6 +127,7 @@ round(main,13)
 outline(main,color.blue,1.6)
 
 local scale = ui("UIScale",main,{Scale=1})
+
 local function resize()
     local cam = workspace.CurrentCamera
     if cam then
@@ -160,8 +165,9 @@ local content = ui("ScrollingFrame",page,{
     CanvasSize = UDim2.fromOffset(0,204)
 })
 
-local status = text(right,"Hub ready",
-    6,225,186,28,10,color.muted)
+local status = text(
+    right,"Hub ready",6,225,186,28,10,color.muted
+)
 status.TextWrapped = true
 status.TextXAlignment = Enum.TextXAlignment.Center
 
@@ -174,16 +180,19 @@ local logo1 = text(right,"BRONX",12,4,175,29,24)
 logo1.TextXAlignment = Enum.TextXAlignment.Center
 logo1.TextStrokeTransparency = 0
 
-local logo2 = text(right,"STREETS",
-    12,31,175,28,23,color.red)
+local logo2 = text(
+    right,"STREETS",12,31,175,28,23,color.red
+)
 logo2.TextXAlignment = Enum.TextXAlignment.Center
 
-local previewLabel = text(right,
-    "PLAYER PREVIEW",10,89,180,22,13,color.green)
+local previewLabel = text(
+    right,"PLAYER PREVIEW",10,89,180,22,13,color.green
+)
 previewLabel.TextXAlignment = Enum.TextXAlignment.Center
 
-local avatarBox = panel(right,54,119,90,95,
-    Color3.fromRGB(10,20,14))
+local avatarBox = panel(
+    right,54,119,90,95,Color3.fromRGB(10,20,14)
+)
 outline(avatarBox,color.green,2)
 
 local avatar = ui("ImageLabel",avatarBox,{
@@ -203,11 +212,14 @@ task.spawn(function()
     if ok and alive then avatar.Image = url end
 end)
 
--- FOV ring, independent of the FOV restriction
-local circle = panel(overlay,0,0,300,300,color.purple)
+-- FOV
+local circle = panel(
+    overlay,0,0,300,300,color.purple
+)
 circle.AnchorPoint = Vector2.new(.5,.5)
 circle.BackgroundTransparency = 1
 circle.Visible = false
+
 ui("UICorner",circle,{
     CornerRadius = UDim.new(1,0)
 })
@@ -222,7 +234,7 @@ local function updateCircle()
     circle.Visible = state["Combat:Show FOV"] == true
 end
 
--- ESP rendering
+-- ESP
 local bonesR15 = {
     {"Head","UpperTorso"},
     {"UpperTorso","LowerTorso"},
@@ -250,16 +262,20 @@ local bonesR6 = {
 
 local function enemy(p)
     if p == LP then return false end
+
     if state["ESP:Team Check (Enemy Only)"] then
         if LP.Team and p.Team then
             return LP.Team ~= p.Team
         end
     end
+
     return true
 end
 
 local function line()
-    local f = panel(overlay,0,0,0,2,color.green)
+    local f = panel(
+        overlay,0,0,0,2,color.green
+    )
     f.Visible = false
     table.insert(drawings,f)
     return f
@@ -268,6 +284,7 @@ end
 local function drawLine(f,a,b)
     local d = b-a
     local len = d.Magnitude
+
     f.Position = UDim2.fromOffset(
         (a.X+b.X-len)/2,
         (a.Y+b.Y-2)/2
@@ -291,7 +308,9 @@ local function refreshESP()
     for _,p in ipairs(Players:GetPlayers()) do
         if enemy(p) and p.Character then
             local char = p.Character
-            local hum = char:FindFirstChildOfClass("Humanoid")
+            local hum = char:FindFirstChildOfClass(
+                "Humanoid"
+            )
             local head = char:FindFirstChild("Head")
 
             if hum and head and hum.Health > 0 then
@@ -311,12 +330,15 @@ local function refreshESP()
                 end
 
                 if state["ESP:Boxes"] then
-                    v.box = {line(),line(),line(),line()}
+                    v.box = {
+                        line(),line(),line(),line()
+                    }
                 end
 
                 if state["ESP:Skeleton"] then
                     v.bones = {}
-                    local rig = hum.RigType ==
+                    local rig =
+                        hum.RigType ==
                         Enum.HumanoidRigType.R15
                         and bonesR15 or bonesR6
 
@@ -329,17 +351,21 @@ local function refreshESP()
 
                 if state["ESP:Name"] or
                     state["ESP:Distance"] then
+
                     local bb = ui("BillboardGui",pg,{
                         Adornee = head,
                         Size = UDim2.fromOffset(170,40),
                         StudsOffset = Vector3.new(0,3,0),
                         AlwaysOnTop = true
                     })
-                    v.info = text(bb,"",0,0,
-                        170,40,12,color.green)
+
+                    v.info = text(
+                        bb,"",0,0,170,40,12,color.green
+                    )
                     v.info.TextXAlignment =
                         Enum.TextXAlignment.Center
                     v.info.TextStrokeTransparency = .2
+
                     table.insert(drawings,bb)
                 end
 
@@ -353,6 +379,7 @@ local function hideVisual(v)
     for _,edge in ipairs(v.box or {}) do
         edge.Visible = false
     end
+
     for _,bone in ipairs(v.bones or {}) do
         bone[3].Visible = false
     end
@@ -364,13 +391,19 @@ local function renderESP()
 
     for _,v in ipairs(targets) do
         local char = v.char
-        local hum = char:FindFirstChildOfClass("Humanoid")
-        local root = char:FindFirstChild("HumanoidRootPart")
+        local hum = char:FindFirstChildOfClass(
+            "Humanoid"
+        )
+        local root = char:FindFirstChild(
+            "HumanoidRootPart"
+        )
 
         if not hum or hum.Health <= 0
             or not root or not enemy(v.p) then
+
             hideVisual(v)
             if v.info then v.info.Text = "" end
+
         else
             local center,visible =
                 camera:WorldToViewportPoint(root.Position)
@@ -379,13 +412,21 @@ local function renderESP()
                 hideVisual(v)
             else
                 if v.box then
-                    local top = camera:WorldToViewportPoint(
-                        root.Position+Vector3.new(0,3,0))
-                    local bottom = camera:WorldToViewportPoint(
-                        root.Position-Vector3.new(0,3,0))
+                    local top =
+                        camera:WorldToViewportPoint(
+                            root.Position+
+                            Vector3.new(0,3,0)
+                        )
+
+                    local bottom =
+                        camera:WorldToViewportPoint(
+                            root.Position-
+                            Vector3.new(0,3,0)
+                        )
 
                     local h = math.clamp(
-                        math.abs(bottom.Y-top.Y),8,2000)
+                        math.abs(bottom.Y-top.Y),8,2000
+                    )
                     local w = h*.48
                     local x = center.X-w/2
                     local y = math.min(top.Y,bottom.Y)
@@ -404,15 +445,23 @@ local function renderESP()
                 for _,bone in ipairs(v.bones or {}) do
                     local p1 = char:FindFirstChild(bone[1])
                     local p2 = char:FindFirstChild(bone[2])
+
                     if p1 and p2 then
                         local a,va =
-                            camera:WorldToViewportPoint(p1.Position)
+                            camera:WorldToViewportPoint(
+                                p1.Position
+                            )
                         local b,vb =
-                            camera:WorldToViewportPoint(p2.Position)
+                            camera:WorldToViewportPoint(
+                                p2.Position
+                            )
+
                         if va and vb and a.Z>0 and b.Z>0 then
-                            drawLine(bone[3],
+                            drawLine(
+                                bone[3],
                                 Vector2.new(a.X,a.Y),
-                                Vector2.new(b.X,b.Y))
+                                Vector2.new(b.X,b.Y)
+                            )
                         else
                             bone[3].Visible = false
                         end
@@ -424,43 +473,59 @@ local function renderESP()
 
             if v.info then
                 local parts = {}
+
                 if state["ESP:Name"] then
-                    table.insert(parts,v.p.DisplayName)
+                    table.insert(
+                        parts,v.p.DisplayName
+                    )
                 end
+
                 if state["ESP:Distance"] then
-                    local myRoot = LP.Character and
-                        LP.Character:FindFirstChild("HumanoidRootPart")
+                    local myRoot =
+                        LP.Character and
+                        LP.Character:FindFirstChild(
+                            "HumanoidRootPart"
+                        )
+
                     if myRoot then
-                        local dist =
-                            (myRoot.Position-root.Position).Magnitude
-                        table.insert(parts,
-                            string.format("%.0fm",dist))
+                        local dist = (
+                            myRoot.Position-root.Position
+                        ).Magnitude
+
+                        table.insert(
+                            parts,
+                            string.format("%.0fm",dist)
+                        )
                     end
                 end
+
                 v.info.Text = table.concat(parts," | ")
             end
         end
     end
 end
 
--- Aim targeting: targets MUST be inside the FOV
+-- AIMBOT / FOV
 local lockedTarget = nil
 
 local function visibleTarget(char,position)
     if not state["Combat:Wall Check"] then
         return true
     end
+
     local cam = workspace.CurrentCamera
     if not cam then return false end
 
     local params = RaycastParams.new()
-    params.FilterType = Enum.RaycastFilterType.Exclude
+    params.FilterType =
+        Enum.RaycastFilterType.Exclude
     params.FilterDescendantsInstances =
         LP.Character and {LP.Character} or {}
 
     local origin = cam.CFrame.Position
     local result = workspace:Raycast(
-        origin,position-origin,params)
+        origin,position-origin,params
+    )
 
     return result == nil or
         result.Instance:IsDescendantOf(char)
@@ -472,6 +537,7 @@ local function insideFOV(position)
 
     local point,onScreen =
         cam:WorldToViewportPoint(position)
+
     if not onScreen or point.Z <= 0 then
         return false
     end
@@ -492,14 +558,21 @@ local function acquireTarget()
         if enemy(p) and p.Character then
             local char = p.Character
             local hum =
-                char:FindFirstChildOfClass("Humanoid")
+                char:FindFirstChildOfClass(
+                    "Humanoid"
+                )
             local head = char:FindFirstChild("Head")
 
             if hum and hum.Health > 0 and head then
-                local within,dist = insideFOV(head.Position)
+                local within,dist =
+                    insideFOV(head.Position)
 
-                if within and dist < bestDistance and
-                    visibleTarget(char,head.Position) then
+                if within
+                    and dist < bestDistance
+                    and visibleTarget(
+                        char,head.Position
+                    ) then
+
                     best = p
                     bestDistance = dist
                 end
@@ -516,8 +589,6 @@ local function updateAim(dt)
         return
     end
 
-    -- Re-evaluate targets each frame.
-    -- No target outside the circle can be selected.
     lockedTarget = acquireTarget()
     if not lockedTarget then return end
 
@@ -525,7 +596,6 @@ local function updateAim(dt)
     local head = char and char:FindFirstChild("Head")
     if not head then return end
 
-    -- Final safety check before moving camera
     if not insideFOV(head.Position) then
         lockedTarget = nil
         return
@@ -541,21 +611,25 @@ local function updateAim(dt)
 
     local current = camera.CFrame
     local desired = CFrame.lookAt(
-        current.Position,head.Position)
+        current.Position,
+        head.Position
+    )
 
     if smoothness == 0 then
         camera.CFrame = desired
     else
         local speed = 30/(1+smoothness*3)
         local alpha = 1-math.exp(-speed*dt)
-        camera.CFrame = current:Lerp(desired,alpha)
+        camera.CFrame =
+            current:Lerp(desired,alpha)
     end
 end
 
 -- TELEPORT SYSTEM V4.2
--- Automatically searches for map locations
+-- Exact destination names are configurable.
+-- No hard-coded map coordinates are assumed.
 
-local teleportLocations = {
+local locationNames = {
     ["Teleport to Gun Shop"] = {
         "Gun Shop",
         "GunShop",
@@ -570,71 +644,62 @@ local teleportLocations = {
         "BigBank",
         "Main Bank",
         "MainBank"
-    },
-
-    ["Teleport to Shop"] = {
-        "Gun Shop",
-        "GunShop",
-        "Gun Store",
-        "GunStore"
-    },
-
-    ["Teleport to Bank"] = {
-        "Big Bank",
-        "BigBank",
-        "Main Bank",
-        "MainBank"
     }
 }
 
 local function normalizeName(name)
     return string.lower(
-        string.gsub(name, "[^%w]", "")
+        string.gsub(name,"[^%w]","")
     )
 end
 
-local function findTeleportLocation(option)
-    local names = teleportLocations[option]
+local function findDestination(option)
+    local names = locationNames[option]
+    if not names then return nil end
 
-    if not names then
-        return nil
-    end
-
-    local bestObject = nil
+    local best = nil
     local bestScore = 0
 
-    for _,obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("Model") or obj:IsA("BasePart") then
-            local objectName = normalizeName(obj.Name)
+    for _,obj in ipairs(
+        workspace:GetDescendants()
+    ) do
+        if obj:IsA("BasePart")
+            or obj:IsA("Model") then
+
+            local objectName =
+                normalizeName(obj.Name)
 
             for _,wanted in ipairs(names) do
-                local searchName = normalizeName(wanted)
+                local wantedName =
+                    normalizeName(wanted)
+
                 local score = 0
 
-                if objectName == searchName then
+                if objectName == wantedName then
                     score = 100
-                elseif #searchName >= 5
-                    and string.find(
+                elseif #wantedName >= 5 and
+                    string.find(
                         objectName,
-                        searchName,
+                        wantedName,
                         1,
                         true
                     ) then
-                    score = 50
+
+                    score = 40
                 end
 
                 if score > bestScore then
-                    bestObject = obj
+                    best = obj
                     bestScore = score
                 end
             end
         end
     end
 
-    return bestObject
+    return best
 end
 
-local function teleportToLocation(option)
+local function teleportTo(option)
     local character = LP.Character
 
     if not character then
@@ -647,57 +712,58 @@ local function teleportToLocation(option)
     )
 
     if not root then
-        notify("HumanoidRootPart not found")
+        notify("Character root not found")
         return
     end
 
-    local destination = findTeleportLocation(option)
+    local destination = findDestination(option)
 
     if not destination then
         notify("Location not found: " .. option)
         return
     end
 
-    local targetPosition
+    local position
 
     if destination:IsA("Model") then
         local pivot = destination:GetPivot()
-        local _, size = destination:GetBoundingBox()
+        local _,size =
+            destination:GetBoundingBox()
 
-        targetPosition =
-            pivot.Position + Vector3.new(
-                0,
-                size.Y / 2 + 5,
-                0
+        position = pivot.Position +
+            Vector3.new(
+                0,size.Y/2+5,0
             )
     else
-        targetPosition =
-            destination.Position + Vector3.new(
-                0,
-                destination.Size.Y / 2 + 5,
-                0
+        position = destination.Position +
+            Vector3.new(
+                0,destination.Size.Y/2+5,0
             )
     end
 
     character:PivotTo(
-        CFrame.new(targetPosition)
+        CFrame.new(position)
     )
 
-    notify("Teleport attempted: " .. option)
+    notify("Teleport attempted: "..option)
 end
 
--- Movement and lighting
+-- MOVEMENT
 local function getHumanoid()
     local char = LP.Character
     return char and
-        char:FindFirstChildOfClass("Humanoid")
+        char:FindFirstChildOfClass(
+            "Humanoid"
+        )
 end
 
 local function updateMovement()
     local hum = getHumanoid()
     if not hum then return end
+
     hum.WalkSpeed =
         state["Player:Speed"] and 28 or 16
+
     hum.UseJumpPower = true
     hum.JumpPower =
         state["Player:High Jump"] and 85 or 50
@@ -706,20 +772,25 @@ end
 connect(UIS.JumpRequest,function()
     if state["Player:Infinite Jump"] then
         local h = getHumanoid()
+
         if h then
-            h:ChangeState(Enum.HumanoidStateType.Jumping)
+            h:ChangeState(
+                Enum.HumanoidStateType.Jumping
+            )
         end
     end
 end)
 
 connect(LP.CharacterAdded,function()
     task.wait(.5)
+
     if alive then
         updateMovement()
         refreshESP()
     end
 end)
 
+-- FEATURE CONTROLLER
 local function applyFeature(category,option,on)
     local key = category..":"..option
     state[key] = on
@@ -735,73 +806,83 @@ local function applyFeature(category,option,on)
         end
 
     elseif category == "Player" then
-        if option=="Speed" or option=="High Jump" then
+        if option == "Speed"
+            or option == "High Jump" then
+
             updateMovement()
+
         elseif option ~= "Infinite Jump" then
-            notify(option.." needs server integration")
+            notify(
+                option.." needs server integration"
+            )
         end
 
     elseif category == "Misc" then
         if option == "Full Bright" then
             Lighting.Brightness =
                 on and 5 or oldLight.brightness
+
             Lighting.Ambient =
                 on and Color3.new(1,1,1)
                 or oldLight.ambient
+
         elseif option == "Day Mode" then
-            Lighting.ClockTime = on and 12 or oldLight.clock
+            Lighting.ClockTime =
+                on and 12 or oldLight.clock
+
         elseif option == "Night Mode" then
-            Lighting.ClockTime = on and 0 or oldLight.clock
+            Lighting.ClockTime =
+                on and 0 or oldLight.clock
+
         else
             notify(option.." not connected")
         end
 
-   
-    elseif category == "Teleport" and on then
-        if option == "Teleport to Spawn" then
-            local spawn = workspace:FindFirstChildWhichIsA(
-                "SpawnLocation",
-                true
-            )
+    elseif category == "Teleport" then
+        if not on then return end
 
-            local root = LP.Character and
+        if option == "Teleport to Spawn" then
+            local spawn =
+                workspace:FindFirstChildWhichIsA(
+                    "SpawnLocation",
+                    true
+                )
+
+            local root =
+                LP.Character and
                 LP.Character:FindFirstChild(
                     "HumanoidRootPart"
                 )
 
             if spawn and root then
                 root.CFrame =
-                    spawn.CFrame * CFrame.new(0, 4, 0)
+                    spawn.CFrame *
+                    CFrame.new(0,4,0)
 
                 notify("Spawn teleport attempted")
             else
                 notify("Spawn not found")
             end
 
-        elseif option == "Teleport to Shop"
-            or option == "Teleport to Bank"
-            or option == "Teleport to Gun Shop"
+        elseif option == "Teleport to Gun Shop"
             or option == "Teleport to Big Bank" then
 
-            teleportToLocation(option)
+            teleportTo(option)
 
-        else
-            notify("Destination not configured")
-        end
-    end
-
-            end
         else
             notify("Destination not configured")
         end
     end
 end
 
--- Input and key selection
+-- AIM INPUT
 local function matchesKey(input)
-    if selectedKey.EnumType == Enum.KeyCode then
+    if selectedKey.EnumType ==
+        Enum.KeyCode then
+
         return input.KeyCode == selectedKey
     end
+
     return input.UserInputType == selectedKey
 end
 
@@ -810,23 +891,29 @@ local keyButton = nil
 connect(UIS.InputBegan,function(input,processed)
     if binding then
         if input.UserInputType ==
-            Enum.UserInputType.Keyboard and
-            input.KeyCode ~= Enum.KeyCode.Unknown then
+            Enum.UserInputType.Keyboard
+            and input.KeyCode ~=
+            Enum.KeyCode.Unknown then
+
             selectedKey = input.KeyCode
             keyName = input.KeyCode.Name
+
         elseif input.UserInputType ==
-            Enum.UserInputType.MouseButton1 or
-            input.UserInputType ==
-            Enum.UserInputType.MouseButton2 or
-            input.UserInputType ==
+            Enum.UserInputType.MouseButton1
+            or input.UserInputType ==
+            Enum.UserInputType.MouseButton2
+            or input.UserInputType ==
             Enum.UserInputType.MouseButton3 then
+
             selectedKey = input.UserInputType
             keyName = input.UserInputType.Name
         else
             return
         end
+
         binding = false
         held = false
+
         if keyButton and keyButton.Parent then
             keyButton.Text = keyName
         end
@@ -845,33 +932,79 @@ connect(UIS.InputEnded,function(input)
     end
 end)
 
--- Tabs and controls
+-- MENU TABS
 local tabs = {
-    {"⌂","Home"},{"⚔","Combat"},{"◉","ESP"},
-    {"♟","Player"},{"⌖","Teleport"},
-    {"⚒","Misc"},{"⚙","Settings"}
+    {"⌂","Home"},
+    {"⚔","Combat"},
+    {"◉","ESP"},
+    {"♟","Player"},
+    {"⌖","Teleport"},
+    {"⚒","Misc"},
+    {"⚙","Settings"}
 }
 
 local options = {
-    Home = {"Enable Hub","Show Player Info","Enable Effects"},
-    Combat = {"Aimbot","Silent Aim","Target Lock",
-        "FOV Enabled","Show FOV","Wall Check"},
-    ESP = {"Player ESP","Name","Distance",
-        "Boxes","Skeleton","Team Check (Enemy Only)"},
-    Player = {"Speed","High Jump","Infinite Jump",
-        "No Stamina","Anti Fall Damage"},
-    Teleport = {"Teleport to Spawn","Teleport to Shop",
-        "Teleport to Bank","Custom Location"},
-    Misc = {"Full Bright","Day Mode","Night Mode","FPS Boost"},
-    Settings = {"Show Notifications","Save Settings",
-        "Enable Keybinds"}
+    Home = {
+        "Enable Hub",
+        "Show Player Info",
+        "Enable Effects"
+    },
+
+    Combat = {
+        "Aimbot",
+        "Silent Aim",
+        "Target Lock",
+        "FOV Enabled",
+        "Show FOV",
+        "Wall Check"
+    },
+
+    ESP = {
+        "Player ESP",
+        "Name",
+        "Distance",
+        "Boxes",
+        "Skeleton",
+        "Team Check (Enemy Only)"
+    },
+
+    Player = {
+        "Speed",
+        "High Jump",
+        "Infinite Jump",
+        "No Stamina",
+        "Anti Fall Damage"
+    },
+
+    Teleport = {
+        "Teleport to Spawn",
+        "Teleport to Gun Shop",
+        "Teleport to Big Bank",
+        "Custom Location"
+    },
+
+    Misc = {
+        "Full Bright",
+        "Day Mode",
+        "Night Mode",
+        "FPS Boost"
+    },
+
+    Settings = {
+        "Show Notifications",
+        "Save Settings",
+        "Enable Keybinds"
+    }
 }
 
 local tabButtons = {}
 
 local function makeToggle(category,option,y)
-    local row = panel(content,0,y,338,30,color.row)
+    local row = panel(
+        content,0,y,338,30,color.row
+    )
     round(row,5)
+
     text(row,option,11,0,270,30,12)
 
     local b = ui("TextButton",row,{
@@ -882,64 +1015,108 @@ local function makeToggle(category,option,y)
     })
     round(b,12)
 
-    local dot = panel(b,3,2,16,16,color.white)
+    local dot = panel(
+        b,3,2,16,16,color.white
+    )
     round(dot,10)
 
     local key = category..":"..option
 
     local function redraw()
         local on = state[key] == true
+
         b.BackgroundColor3 =
             on and color.purple
             or Color3.fromRGB(56,60,70)
+
         dot.Position =
-            UDim2.fromOffset(on and 22 or 3,2)
+            UDim2.fromOffset(
+                on and 22 or 3,
+                2
+            )
     end
 
     redraw()
+
     b.MouseButton1Click:Connect(function()
-        applyFeature(category,option,not state[key])
+        applyFeature(
+            category,
+            option,
+            not state[key]
+        )
         redraw()
     end)
 end
 
+-- SLIDERS
 local function makeSlider(name,y,min,max,get,set)
-    local row = panel(content,0,y,338,53,color.row)
+    local row = panel(
+        content,0,y,338,53,color.row
+    )
     round(row,5)
+
     text(row,name,10,2,260,23,12)
 
-    local value = text(row,"",282,2,46,23,12,color.green)
-    value.TextXAlignment = Enum.TextXAlignment.Right
+    local value = text(
+        row,"",282,2,46,23,12,color.green
+    )
+    value.TextXAlignment =
+        Enum.TextXAlignment.Right
 
-    local track = panel(row,12,34,312,5,
-        Color3.fromRGB(65,69,80))
+    local track = panel(
+        row,12,34,312,5,
+        Color3.fromRGB(65,69,80)
+    )
     round(track,4)
-    local fill = panel(track,0,0,0,5,color.purple)
+
+    local fill = panel(
+        track,0,0,0,5,color.purple
+    )
     round(fill,4)
-    local knob = panel(track,0,-5,15,15,color.white)
+
+    local knob = panel(
+        track,0,-5,15,15,color.white
+    )
     round(knob,8)
 
     local function redraw()
         local v = get()
-        local ratio = (v-min)/(max-min)
-        fill.Size = UDim2.fromScale(ratio,1)
-        knob.Position = UDim2.new(ratio,-7,-1,0)
+        local ratio =
+            (v-min)/(max-min)
+
+        fill.Size =
+            UDim2.fromScale(ratio,1)
+
+        knob.Position =
+            UDim2.new(ratio,-7,-1,0)
+
         value.Text = tostring(v)
     end
 
     local dragging = false
+
     local function update(x)
         local width = track.AbsoluteSize.X
         if width <= 0 then return end
+
         local ratio = math.clamp(
-            (x-track.AbsolutePosition.X)/width,0,1)
-        set(math.floor(min+(max-min)*ratio+.5))
+            (x-track.AbsolutePosition.X)
+            /width,
+            0,
+            1
+        )
+
+        set(math.floor(
+            min+(max-min)*ratio+.5
+        ))
+
         redraw()
     end
 
     row.InputBegan:Connect(function(input)
         if input.UserInputType ==
             Enum.UserInputType.MouseButton1 then
+
             dragging = true
             update(input.Position.X)
         end
@@ -948,6 +1125,7 @@ local function makeSlider(name,y,min,max,get,set)
     connect(UIS.InputChanged,function(input)
         if dragging and input.UserInputType ==
             Enum.UserInputType.MouseMovement then
+
             update(input.Position.X)
         end
     end)
@@ -955,6 +1133,7 @@ local function makeSlider(name,y,min,max,get,set)
     connect(UIS.InputEnded,function(input)
         if input.UserInputType ==
             Enum.UserInputType.MouseButton1 then
+
             dragging = false
         end
     end)
@@ -963,8 +1142,11 @@ local function makeSlider(name,y,min,max,get,set)
 end
 
 local function makeKeybind(y)
-    local row = panel(content,0,y,338,39,color.row)
+    local row = panel(
+        content,0,y,338,39,color.row
+    )
     round(row,5)
+
     text(row,"Aim Key",10,5,145,29,12)
 
     local b = ui("TextButton",row,{
@@ -988,36 +1170,63 @@ local function makeKeybind(y)
 end
 
 local function showPage(name)
-    selectedPage = name
     pageTitle.Text = name
     binding = false
     keyButton = nil
 
-    for _,child in ipairs(content:GetChildren()) do
+    for _,child in ipairs(
+        content:GetChildren()
+    ) do
         child:Destroy()
     end
 
     for tab,b in pairs(tabButtons) do
         b.BackgroundColor3 =
-            tab == name and color.selected or color.panel
+            tab == name
+            and color.selected
+            or color.panel
     end
 
     local y = 0
-    for _,option in ipairs(options[name] or {}) do
+
+    for _,option in ipairs(
+        options[name] or {}
+    ) do
         makeToggle(name,option,y)
         y += 33
     end
 
     if name == "Combat" then
         y += 6
-        makeSlider("Smoothness",y,0,20,
-            function() return smoothness end,
-            function(v) smoothness = v end)
+
+        makeSlider(
+            "Smoothness",
+            y,
+            0,
+            20,
+            function()
+                return smoothness
+            end,
+            function(v)
+                smoothness = v
+            end
+        )
+
         y += 59
 
-        makeSlider("FOV Size",y,20,400,
-            function() return fovRadius end,
-            function(v) fovRadius = v end)
+        makeSlider(
+            "FOV Size",
+            y,
+            20,
+            400,
+            function()
+                return fovRadius
+            end,
+            function(v)
+                fovRadius = v
+            end
+        )
+
         y += 59
 
         makeKeybind(y)
@@ -1025,28 +1234,38 @@ local function showPage(name)
     end
 
     content.CanvasSize =
-        UDim2.fromOffset(0,math.max(y,204))
+        UDim2.fromOffset(
+            0,
+            math.max(y,204)
+        )
 end
 
 for i,item in ipairs(tabs) do
-    local symbol,name = item[1],item[2]
+    local symbol,name =
+        item[1],item[2]
+
     local b = ui("TextButton",sidebar,{
-        Position = UDim2.fromOffset(7,5+(i-1)*35),
+        Position = UDim2.fromOffset(
+            7,5+(i-1)*35
+        ),
         Size = UDim2.fromOffset(132,31),
         BackgroundColor3 = color.panel,
         BorderSizePixel = 0,
         Text = ""
     })
     round(b,6)
+
     text(b,symbol,10,0,24,31,17)
     text(b,name,37,0,90,31,12)
+
     tabButtons[name] = b
+
     b.MouseButton1Click:Connect(function()
         showPage(name)
     end)
 end
 
--- Window controls
+-- WINDOW CONTROLS
 local function headerButton(s,x,callback)
     local b = ui("TextButton",header,{
         Position = UDim2.fromOffset(x,3),
@@ -1060,6 +1279,7 @@ local function headerButton(s,x,callback)
 end
 
 local cleanup
+
 cleanup = function()
     if not alive then return end
     alive = false
@@ -1068,11 +1288,16 @@ cleanup = function()
         _G.BronxHubCleanup = nil
     end
 
-    RS:UnbindFromRenderStep("BronxHubV41")
+    RS:UnbindFromRenderStep(
+        "BronxHubV42"
+    )
+
     clearESP()
+
     for _,c in ipairs(links) do
         c:Disconnect()
     end
+
     overlay:Destroy()
     gui:Destroy()
 end
@@ -1082,22 +1307,27 @@ _G.BronxHubCleanup = cleanup
 headerButton("×",711,cleanup)
 
 local minimized = false
+
 headerButton("−",680,function()
     minimized = not minimized
+
     main.Size = minimized and
         UDim2.fromOffset(760,44)
         or UDim2.fromOffset(760,320)
+
     sidebar.Visible = not minimized
     page.Visible = not minimized
     right.Visible = not minimized
 end)
 
+-- DRAG WINDOW
 local dragging = false
 local dragStart,windowStart
 
 header.InputBegan:Connect(function(input)
     if input.UserInputType ==
         Enum.UserInputType.MouseButton1 then
+
         dragging = true
         dragStart = input.Position
         windowStart = main.Position
@@ -1107,6 +1337,7 @@ end)
 header.InputEnded:Connect(function(input)
     if input.UserInputType ==
         Enum.UserInputType.MouseButton1 then
+
         dragging = false
     end
 end)
@@ -1114,20 +1345,25 @@ end)
 connect(UIS.InputChanged,function(input)
     if dragging and input.UserInputType ==
         Enum.UserInputType.MouseMovement then
+
         local d = input.Position-dragStart
+
         main.Position = UDim2.new(
-            windowStart.X.Scale,windowStart.X.Offset+d.X,
-            windowStart.Y.Scale,windowStart.Y.Offset+d.Y
+            windowStart.X.Scale,
+            windowStart.X.Offset+d.X,
+            windowStart.Y.Scale,
+            windowStart.Y.Offset+d.Y
         )
     end
 end)
 
--- Character updates
+-- PLAYER REFRESH
 local function watchPlayer(p)
     connect(p.CharacterAdded,function()
         task.wait(.4)
         if alive then refreshESP() end
     end)
+
     connect(p.CharacterRemoving,function()
         task.defer(function()
             if alive then refreshESP() end
@@ -1135,14 +1371,19 @@ local function watchPlayer(p)
     end)
 end
 
-for _,p in ipairs(Players:GetPlayers()) do
+for _,p in ipairs(
+    Players:GetPlayers()
+) do
     watchPlayer(p)
 end
 
 connect(Players.PlayerAdded,function(p)
     watchPlayer(p)
     task.wait(.4)
-    if alive then refreshESP() end
+
+    if alive then
+        refreshESP()
+    end
 end)
 
 connect(Players.PlayerRemoving,function()
@@ -1151,17 +1392,18 @@ connect(Players.PlayerRemoving,function()
     end)
 end)
 
--- Main render loop
+-- RENDER LOOP
 RS:BindToRenderStep(
-    "BronxHubV41",
+    "BronxHubV42",
     Enum.RenderPriority.Camera.Value+1,
     function(dt)
         if not alive then return end
+
         updateCircle()
         renderESP()
         updateAim(dt)
     end
 )
 
-showPage("Combat")
-notify("Bronx Streets Hub V4.1 loaded")
+showPage("Teleport")
+notify("Bronx Streets Hub V4.2 loaded")
