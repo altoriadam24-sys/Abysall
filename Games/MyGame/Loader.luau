@@ -33,3 +33,25 @@ title.Text = "MY GAME HUB"
 title.TextColor3 = Color3.new(1, 1, 1)
 title.TextScaled = true
 title.Parent = frame
+
+local button = Instance.new("TextButton")
+button.Name = "ESPButton"
+button.Size = UDim2.fromOffset(260, 45)
+button.Position = UDim2.fromOffset(30, 75)
+button.BackgroundColor3 = Color3.fromRGB(100, 50, 180)
+button.TextColor3 = Color3.new(1, 1, 1)
+button.TextScaled = true
+button.Text = "ESP: OFF"
+button.Parent = frame
+
+local espEnabled = false
+
+button.MouseButton1Click:Connect(function()
+    espEnabled = not espEnabled
+
+    if espEnabled then
+        button.Text = "ESP: ON"
+    else
+        button.Text = "ESP: OFF"
+    end
+end)
