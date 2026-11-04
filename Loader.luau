@@ -6,10 +6,19 @@ getgenv().Abysall = {
 }
 
 local GameList = {
-  [2440500124] = "Doors"
+    [10763808155] = "MyGame"
 }
 
-local BaseUrl = "https://raw.githubusercontent.com/bocaj111004/Abysall/refs/heads/main/"
+
+
+
+
+
+
+local BaseUrl = "https://raw.githubusercontent.com/altoriadam24-sys/Abysall/refs/heads/main/"
+
+
+
 getgenv().Abysall = {
     Environment = loadstring(game:HttpGet(BaseUrl .. "Components/Environment.luau"))(),
     ESPLibrary = loadstring(game:HttpGet(BaseUrl .. "Components/ESP.luau"))(),
