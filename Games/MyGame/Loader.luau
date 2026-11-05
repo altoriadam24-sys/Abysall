@@ -1,6 +1,7 @@
 
--- BRONX STREETS HUB V4.2
--- Full menu with updated teleport system
+-- BRONX STREETS HUB V4.3
+-- Single-file menu
+-- Gun Store / Bank teleport update
 
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
@@ -10,32 +11,29 @@ local Lighting = game:GetService("Lighting")
 local LP = Players.LocalPlayer
 if not LP then return end
 
-local GAME_ID = 10763808155
-
-if game.GameId ~= GAME_ID then
-    warn("Incorrect GameId:", game.GameId)
+if game.GameId ~= 10763808155 then
+    warn("Wrong GameId:",game.GameId)
     return
 end
 
--- Remove previous execution
 if _G.BronxHubCleanup then
     pcall(_G.BronxHubCleanup)
 end
 
 local pg = LP:WaitForChild("PlayerGui")
-local links = {}
-local drawings = {}
-local targets = {}
+local connections = {}
 local state = {}
+local markers = {}
+local visuals = {}
+local savedPlaces = {}
 
-local alive = true
-local held = false
+local running = true
+local aimHeld = false
 local binding = false
-local selectedKey = Enum.UserInputType.MouseButton2
-local keyName = "Right Mouse"
+local aimKey = Enum.UserInputType.MouseButton2
+local aimKeyName = "Right Mouse"
 local smoothness = 5
 local fovRadius = 150
-local lockedTarget = nil
 
 local oldLight = {
     brightness = Lighting.Brightness,
@@ -43,7 +41,7 @@ local oldLight = {
     clock = Lighting.ClockTime
 }
 
-local color = {
+local C = {
     bg = Color3.fromRGB(9,11,17),
     panel = Color3.fromRGB(15,18,25),
     row = Color3.fromRGB(23,26,34),
@@ -58,115 +56,121 @@ local color = {
 
 local function connect(signal,fn)
     local c = signal:Connect(fn)
-    table.insert(links,c)
+    table.insert(connections,c)
     return c
 end
 
-local function ui(class,parent,props)
+local function create(class,parent,properties)
     local obj = Instance.new(class)
-    for k,v in pairs(props or {}) do
+    for k,v in pairs(properties or {}) do
         obj[k] = v
     end
     obj.Parent = parent
     return obj
 end
 
-local function round(obj,r)
-    ui("UICorner",obj,{
-        CornerRadius = UDim.new(0,r)
-    })
-end
-
-local function panel(parent,x,y,w,h,c)
-    return ui("Frame",parent,{
+local function panel(parent,x,y,w,h,color)
+    return create("Frame",parent,{
         Position = UDim2.fromOffset(x,y),
         Size = UDim2.fromOffset(w,h),
-        BackgroundColor3 = c,
+        BackgroundColor3 = color,
         BorderSizePixel = 0
     })
 end
 
-local function text(parent,s,x,y,w,h,size,c)
-    return ui("TextLabel",parent,{
+local function round(obj,r)
+    create("UICorner",obj,{
+        CornerRadius = UDim.new(0,r)
+    })
+end
+
+local function outline(obj,color,width)
+    create("UIStroke",obj,{
+        Color = color,
+        Thickness = width or 1
+    })
+end
+
+local function label(parent,s,x,y,w,h,size,color)
+    return create("TextLabel",parent,{
         Position = UDim2.fromOffset(x,y),
         Size = UDim2.fromOffset(w,h),
         BackgroundTransparency = 1,
         Text = s,
-        TextColor3 = c or color.white,
+        TextColor3 = color or C.white,
         TextSize = size,
         Font = Enum.Font.GothamBold,
         TextXAlignment = Enum.TextXAlignment.Left
     })
 end
 
-local function outline(obj,c,width)
-    ui("UIStroke",obj,{
-        Color = c,
-        Thickness = width or 1
-    })
-end
+-- MAIN WINDOW
 
--- GUI
-local gui = ui("ScreenGui",pg,{
+local gui = create("ScreenGui",pg,{
     Name = "BronxStreetsHub",
     ResetOnSpawn = false,
     ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 })
 
-local overlay = ui("ScreenGui",pg,{
+local overlay = create("ScreenGui",pg,{
     Name = "BronxStreetsOverlay",
     ResetOnSpawn = false,
     IgnoreGuiInset = true,
     DisplayOrder = 50
 })
 
-local main = panel(gui,0,0,760,320,color.bg)
+local main = panel(gui,0,0,760,320,C.bg)
 main.AnchorPoint = Vector2.new(.5,.5)
 main.Position = UDim2.fromScale(.5,.43)
 round(main,13)
-outline(main,color.blue,1.6)
+outline(main,C.blue,1.6)
 
-local scale = ui("UIScale",main,{Scale=1})
+local scale = create("UIScale",main,{Scale=1})
 
 local function resize()
     local cam = workspace.CurrentCamera
-    if cam then
-        local v = cam.ViewportSize
-        scale.Scale = math.min(
-            1,(v.X-20)/760,(v.Y-20)/320
-        )
-    end
+    if not cam then return end
+    local v = cam.ViewportSize
+    scale.Scale = math.min(
+        1,(v.X-20)/760,(v.Y-20)/320
+    )
 end
+
 resize()
 
-local header = panel(main,6,6,748,37,color.panel)
+local header = panel(main,6,6,748,37,C.panel)
 round(header,7)
-text(header,"BRONX STREETS HUB | FREE 350K",
-    12,1,610,34,18)
 
-local sidebar = panel(main,12,51,146,256,color.panel)
-round(sidebar,9)
+label(header,
+    "BRONX STREETS HUB | FREE 350K",
+    12,1,610,34,18
+)
 
-local page = panel(main,170,51,370,256,color.panel)
+local side = panel(main,12,51,146,256,C.panel)
+round(side,9)
+
+local page = panel(main,170,51,370,256,C.panel)
 round(page,9)
 
-local right = panel(main,550,51,198,256,color.bg)
+local right = panel(main,550,51,198,256,C.bg)
 round(right,9)
 
-local pageTitle = text(page,"ESP",15,7,320,26,17)
+local pageTitle = label(
+    page,"ESP",15,7,320,26,17
+)
 
-local content = ui("ScrollingFrame",page,{
+local content = create("ScrollingFrame",page,{
     Position = UDim2.fromOffset(12,41),
     Size = UDim2.fromOffset(346,204),
     BackgroundTransparency = 1,
     BorderSizePixel = 0,
     ScrollBarThickness = 3,
-    ScrollBarImageColor3 = color.blue,
+    ScrollBarImageColor3 = C.blue,
     CanvasSize = UDim2.fromOffset(0,204)
 })
 
-local status = text(
-    right,"Hub ready",6,225,186,28,10,color.muted
+local status = label(
+    right,"Hub ready",6,225,186,28,10,C.muted
 )
 status.TextWrapped = true
 status.TextXAlignment = Enum.TextXAlignment.Center
@@ -176,26 +180,28 @@ local function notify(message)
     print("[Bronx Hub]",message)
 end
 
-local logo1 = text(right,"BRONX",12,4,175,29,24)
+local logo1 = label(right,"BRONX",12,4,175,29,24)
 logo1.TextXAlignment = Enum.TextXAlignment.Center
 logo1.TextStrokeTransparency = 0
 
-local logo2 = text(
-    right,"STREETS",12,31,175,28,23,color.red
+local logo2 = label(
+    right,"STREETS",12,31,175,28,23,C.red
 )
 logo2.TextXAlignment = Enum.TextXAlignment.Center
 
-local previewLabel = text(
-    right,"PLAYER PREVIEW",10,89,180,22,13,color.green
+local preview = label(
+    right,"PLAYER PREVIEW",
+    10,89,180,22,13,C.green
 )
-previewLabel.TextXAlignment = Enum.TextXAlignment.Center
+preview.TextXAlignment = Enum.TextXAlignment.Center
 
 local avatarBox = panel(
-    right,54,119,90,95,Color3.fromRGB(10,20,14)
+    right,54,119,90,95,
+    Color3.fromRGB(10,20,14)
 )
-outline(avatarBox,color.green,2)
+outline(avatarBox,C.green,2)
 
-local avatar = ui("ImageLabel",avatarBox,{
+local avatar = create("ImageLabel",avatarBox,{
     Size = UDim2.fromScale(1,1),
     BackgroundTransparency = 1,
     ScaleType = Enum.ScaleType.Fit
@@ -209,33 +215,36 @@ task.spawn(function()
             Enum.ThumbnailSize.Size150x150
         )
     end)
-    if ok and alive then avatar.Image = url end
+
+    if ok and running then
+        avatar.Image = url
+    end
 end)
 
--- FOV
-local circle = panel(
-    overlay,0,0,300,300,color.purple
-)
+-- FOV VISUAL
+
+local circle = panel(overlay,0,0,300,300,C.purple)
 circle.AnchorPoint = Vector2.new(.5,.5)
 circle.BackgroundTransparency = 1
 circle.Visible = false
-
-ui("UICorner",circle,{
+create("UICorner",circle,{
     CornerRadius = UDim.new(1,0)
 })
-outline(circle,color.purple,2)
+outline(circle,C.purple,2)
 
-local function updateCircle()
+local function updateFOV()
     local m = UIS:GetMouseLocation()
     circle.Position = UDim2.fromOffset(m.X,m.Y)
     circle.Size = UDim2.fromOffset(
         fovRadius*2,fovRadius*2
     )
-    circle.Visible = state["Combat:Show FOV"] == true
+    circle.Visible =
+        state["Combat:Show FOV"] == true
 end
 
--- ESP
-local bonesR15 = {
+-- ESP SKELETON DEFINITIONS
+
+local r15Bones = {
     {"Head","UpperTorso"},
     {"UpperTorso","LowerTorso"},
     {"UpperTorso","LeftUpperArm"},
@@ -252,7 +261,7 @@ local bonesR15 = {
     {"RightLowerLeg","RightFoot"}
 }
 
-local bonesR6 = {
+local r6Bones = {
     {"Head","Torso"},
     {"Torso","Left Arm"},
     {"Torso","Right Arm"},
@@ -260,7 +269,7 @@ local bonesR6 = {
     {"Torso","Right Leg"}
 }
 
-local function enemy(p)
+local function isTarget(p)
     if p == LP then return false end
 
     if state["ESP:Team Check (Enemy Only)"] then
@@ -272,41 +281,39 @@ local function enemy(p)
     return true
 end
 
-local function line()
-    local f = panel(
-        overlay,0,0,0,2,color.green
-    )
+local function makeLine()
+    local f = panel(overlay,0,0,0,2,C.green)
     f.Visible = false
-    table.insert(drawings,f)
+    table.insert(markers,f)
     return f
 end
 
 local function drawLine(f,a,b)
     local d = b-a
-    local len = d.Magnitude
+    local length = d.Magnitude
 
     f.Position = UDim2.fromOffset(
-        (a.X+b.X-len)/2,
+        (a.X+b.X-length)/2,
         (a.Y+b.Y-2)/2
     )
-    f.Size = UDim2.fromOffset(len,2)
+    f.Size = UDim2.fromOffset(length,2)
     f.Rotation = math.deg(math.atan2(d.Y,d.X))
-    f.Visible = len > 0
+    f.Visible = length > 0
 end
 
 local function clearESP()
-    for _,o in ipairs(drawings) do
-        o:Destroy()
+    for _,obj in ipairs(markers) do
+        obj:Destroy()
     end
-    table.clear(drawings)
-    table.clear(targets)
+    table.clear(markers)
+    table.clear(visuals)
 end
 
 local function refreshESP()
     clearESP()
 
     for _,p in ipairs(Players:GetPlayers()) do
-        if enemy(p) and p.Character then
+        if isTarget(p) and p.Character then
             local char = p.Character
             local hum = char:FindFirstChildOfClass(
                 "Humanoid"
@@ -314,37 +321,44 @@ local function refreshESP()
             local head = char:FindFirstChild("Head")
 
             if hum and head and hum.Health > 0 then
-                local v = {p=p,char=char}
+                local v = {
+                    player = p,
+                    character = char
+                }
 
                 if state["ESP:Player ESP"] then
-                    local h = ui("Highlight",char,{
+                    local h = create("Highlight",char,{
                         Name = "BronxESP",
                         Adornee = char,
-                        FillColor = color.red,
+                        FillColor = C.red,
                         FillTransparency = .65,
-                        OutlineColor = color.green,
+                        OutlineColor = C.green,
                         DepthMode =
                             Enum.HighlightDepthMode.AlwaysOnTop
                     })
-                    table.insert(drawings,h)
+                    table.insert(markers,h)
                 end
 
                 if state["ESP:Boxes"] then
                     v.box = {
-                        line(),line(),line(),line()
+                        makeLine(),
+                        makeLine(),
+                        makeLine(),
+                        makeLine()
                     }
                 end
 
                 if state["ESP:Skeleton"] then
                     v.bones = {}
-                    local rig =
+
+                    local boneList =
                         hum.RigType ==
                         Enum.HumanoidRigType.R15
-                        and bonesR15 or bonesR6
+                        and r15Bones or r6Bones
 
-                    for _,pair in ipairs(rig) do
+                    for _,pair in ipairs(boneList) do
                         table.insert(v.bones,{
-                            pair[1],pair[2],line()
+                            pair[1],pair[2],makeLine()
                         })
                     end
                 end
@@ -352,30 +366,29 @@ local function refreshESP()
                 if state["ESP:Name"] or
                     state["ESP:Distance"] then
 
-                    local bb = ui("BillboardGui",pg,{
+                    local bb = create("BillboardGui",pg,{
                         Adornee = head,
                         Size = UDim2.fromOffset(170,40),
                         StudsOffset = Vector3.new(0,3,0),
                         AlwaysOnTop = true
                     })
 
-                    v.info = text(
-                        bb,"",0,0,170,40,12,color.green
+                    v.info = label(
+                        bb,"",0,0,170,40,12,C.green
                     )
                     v.info.TextXAlignment =
                         Enum.TextXAlignment.Center
                     v.info.TextStrokeTransparency = .2
-
-                    table.insert(drawings,bb)
+                    table.insert(markers,bb)
                 end
 
-                table.insert(targets,v)
+                table.insert(visuals,v)
             end
         end
     end
 end
 
-local function hideVisual(v)
+local function hideESP(v)
     for _,edge in ipairs(v.box or {}) do
         edge.Visible = false
     end
@@ -386,11 +399,11 @@ local function hideVisual(v)
 end
 
 local function renderESP()
-    local camera = workspace.CurrentCamera
-    if not camera then return end
+    local cam = workspace.CurrentCamera
+    if not cam then return end
 
-    for _,v in ipairs(targets) do
-        local char = v.char
+    for _,v in ipairs(visuals) do
+        local char = v.character
         local hum = char:FindFirstChildOfClass(
             "Humanoid"
         )
@@ -399,33 +412,28 @@ local function renderESP()
         )
 
         if not hum or hum.Health <= 0
-            or not root or not enemy(v.p) then
+            or not root or not isTarget(v.player) then
 
-            hideVisual(v)
+            hideESP(v)
             if v.info then v.info.Text = "" end
-
         else
             local center,visible =
-                camera:WorldToViewportPoint(root.Position)
+                cam:WorldToViewportPoint(root.Position)
 
             if not visible or center.Z <= 0 then
-                hideVisual(v)
+                hideESP(v)
             else
                 if v.box then
-                    local top =
-                        camera:WorldToViewportPoint(
-                            root.Position+
-                            Vector3.new(0,3,0)
-                        )
-
-                    local bottom =
-                        camera:WorldToViewportPoint(
-                            root.Position-
-                            Vector3.new(0,3,0)
-                        )
+                    local top = cam:WorldToViewportPoint(
+                        root.Position+Vector3.new(0,3,0)
+                    )
+                    local bottom = cam:WorldToViewportPoint(
+                        root.Position-Vector3.new(0,3,0)
+                    )
 
                     local h = math.clamp(
-                        math.abs(bottom.Y-top.Y),8,2000
+                        math.abs(bottom.Y-top.Y),
+                        8,2000
                     )
                     local w = h*.48
                     local x = center.X-w/2
@@ -448,15 +456,13 @@ local function renderESP()
 
                     if p1 and p2 then
                         local a,va =
-                            camera:WorldToViewportPoint(
-                                p1.Position
-                            )
+                            cam:WorldToViewportPoint(p1.Position)
                         local b,vb =
-                            camera:WorldToViewportPoint(
-                                p2.Position
-                            )
+                            cam:WorldToViewportPoint(p2.Position)
 
-                        if va and vb and a.Z>0 and b.Z>0 then
+                        if va and vb and a.Z > 0
+                            and b.Z > 0 then
+
                             drawLine(
                                 bone[3],
                                 Vector2.new(a.X,a.Y),
@@ -476,7 +482,7 @@ local function renderESP()
 
                 if state["ESP:Name"] then
                     table.insert(
-                        parts,v.p.DisplayName
+                        parts,v.player.DisplayName
                     )
                 end
 
@@ -488,13 +494,13 @@ local function renderESP()
                         )
 
                     if myRoot then
-                        local dist = (
+                        local d = (
                             myRoot.Position-root.Position
                         ).Magnitude
 
                         table.insert(
                             parts,
-                            string.format("%.0fm",dist)
+                            string.format("%.0fm",d)
                         )
                     end
                 end
@@ -505,31 +511,7 @@ local function renderESP()
     end
 end
 
--- AIMBOT / FOV
-local lockedTarget = nil
-
-local function visibleTarget(char,position)
-    if not state["Combat:Wall Check"] then
-        return true
-    end
-
-    local cam = workspace.CurrentCamera
-    if not cam then return false end
-
-    local params = RaycastParams.new()
-    params.FilterType =
-        Enum.RaycastFilterType.Exclude
-    params.FilterDescendantsInstances =
-        LP.Character and {LP.Character} or {}
-
-    local origin = cam.CFrame.Position
-    local result = workspace:Raycast(
-        origin,position-origin,params
-    )
-
-    return result == nil or
-        result.Instance:IsDescendantOf(char)
-end
+-- CAMERA AIM CONTROLS
 
 local function insideFOV(position)
     local cam = workspace.CurrentCamera
@@ -550,31 +532,53 @@ local function insideFOV(position)
     return distance <= fovRadius,distance
 end
 
+local function visibleTarget(char,position)
+    if not state["Combat:Wall Check"] then
+        return true
+    end
+
+    local cam = workspace.CurrentCamera
+    if not cam then return false end
+
+    local params = RaycastParams.new()
+    params.FilterType =
+        Enum.RaycastFilterType.Exclude
+
+    params.FilterDescendantsInstances =
+        LP.Character and {LP.Character} or {}
+
+    local origin = cam.CFrame.Position
+    local hit = workspace:Raycast(
+        origin,position-origin,params
+    )
+
+    return hit == nil or
+        hit.Instance:IsDescendantOf(char)
+end
+
 local function acquireTarget()
     local best = nil
-    local bestDistance = math.huge
+    local bestDist = math.huge
 
     for _,p in ipairs(Players:GetPlayers()) do
-        if enemy(p) and p.Character then
+        if isTarget(p) and p.Character then
             local char = p.Character
             local hum =
-                char:FindFirstChildOfClass(
-                    "Humanoid"
-                )
+                char:FindFirstChildOfClass("Humanoid")
             local head = char:FindFirstChild("Head")
 
             if hum and hum.Health > 0 and head then
-                local within,dist =
+                local inside,distance =
                     insideFOV(head.Position)
 
-                if within
-                    and dist < bestDistance
+                if inside
+                    and distance < bestDist
                     and visibleTarget(
                         char,head.Position
                     ) then
 
                     best = p
-                    bestDistance = dist
+                    bestDist = distance
                 end
             end
         end
@@ -584,77 +588,90 @@ local function acquireTarget()
 end
 
 local function updateAim(dt)
-    if not state["Combat:Aimbot"] or not held then
-        lockedTarget = nil
+    if not state["Combat:Aimbot"]
+        or not aimHeld then
         return
     end
 
-    lockedTarget = acquireTarget()
-    if not lockedTarget then return end
+    local target = acquireTarget()
+    if not target or not target.Character then
+        return
+    end
 
-    local char = lockedTarget.Character
-    local head = char and char:FindFirstChild("Head")
+    local head = target.Character:FindFirstChild("Head")
     if not head then return end
 
     if not insideFOV(head.Position) then
-        lockedTarget = nil
         return
     end
 
-    if not visibleTarget(char,head.Position) then
-        lockedTarget = nil
-        return
-    end
+    local cam = workspace.CurrentCamera
+    if not cam then return end
 
-    local camera = workspace.CurrentCamera
-    if not camera then return end
-
-    local current = camera.CFrame
+    local current = cam.CFrame
     local desired = CFrame.lookAt(
         current.Position,
         head.Position
     )
 
     if smoothness == 0 then
-        camera.CFrame = desired
+        cam.CFrame = desired
     else
         local speed = 30/(1+smoothness*3)
         local alpha = 1-math.exp(-speed*dt)
-        camera.CFrame =
-            current:Lerp(desired,alpha)
+        cam.CFrame = current:Lerp(desired,alpha)
     end
 end
 
--- TELEPORT SYSTEM V4.2
--- Exact destination names are configurable.
--- No hard-coded map coordinates are assumed.
+-- UPDATED TELEPORT SYSTEM
+-- First attempts an automatic lookup.
+-- Saved coordinates provide a fallback.
 
-local locationNames = {
-    ["Teleport to Gun Shop"] = {
-        "Gun Shop",
-        "GunShop",
+local destinationNames = {
+    ["Gun Store"] = {
         "Gun Store",
         "GunStore",
-        "Gun Dealer",
-        "GunDealer"
+        "Gun Store Spawn",
+        "GunStoreSpawn",
+        "Gun Store Entrance"
     },
 
-    ["Teleport to Big Bank"] = {
-        "Big Bank",
-        "BigBank",
-        "Main Bank",
-        "MainBank"
+    ["Bank"] = {
+        "Bank",
+        "BankSpawn",
+        "Bank Spawn",
+        "Bank Entrance",
+        "MainBank",
+        "BigBank"
     }
 }
 
-local function normalizeName(name)
+local function normalizeName(s)
     return string.lower(
-        string.gsub(name,"[^%w]","")
+        string.gsub(s,"[^%w]","")
     )
 end
 
-local function findDestination(option)
-    local names = locationNames[option]
+local function getRoot()
+    local char = LP.Character
+    return char and
+        char:FindFirstChild("HumanoidRootPart")
+end
+
+local function savePlace(name)
+    local root = getRoot()
+
+    if not root then
+        notify("Character not found")
+        return
+    end
+
+    savedPlaces[name] = root.CFrame
+    notify(name.." saved")
+end
+
+local function findPlace(name)
+    local names = destinationNames[name]
     if not names then return nil end
 
     local best = nil
@@ -677,15 +694,15 @@ local function findDestination(option)
 
                 if objectName == wantedName then
                     score = 100
-                elseif #wantedName >= 5 and
-                    string.find(
+                elseif #wantedName >= 5
+                    and string.find(
                         objectName,
                         wantedName,
                         1,
                         true
                     ) then
 
-                    score = 40
+                    score = 35
                 end
 
                 if score > bestScore then
@@ -699,62 +716,77 @@ local function findDestination(option)
     return best
 end
 
-local function teleportTo(option)
-    local character = LP.Character
+local function destinationCFrame(obj)
+    if obj:IsA("Model") then
+        local pivot = obj:GetPivot()
+        local _,size = obj:GetBoundingBox()
 
-    if not character then
-        notify("Character not found")
-        return
+        return CFrame.new(
+            pivot.Position +
+            Vector3.new(0,size.Y/2+5,0)
+        )
     end
 
-    local root = character:FindFirstChild(
-        "HumanoidRootPart"
+    return CFrame.new(
+        obj.Position +
+        Vector3.new(0,obj.Size.Y/2+5,0)
     )
-
-    if not root then
-        notify("Character root not found")
-        return
-    end
-
-    local destination = findDestination(option)
-
-    if not destination then
-        notify("Location not found: " .. option)
-        return
-    end
-
-    local position
-
-    if destination:IsA("Model") then
-        local pivot = destination:GetPivot()
-        local _,size =
-            destination:GetBoundingBox()
-
-        position = pivot.Position +
-            Vector3.new(
-                0,size.Y/2+5,0
-            )
-    else
-        position = destination.Position +
-            Vector3.new(
-                0,destination.Size.Y/2+5,0
-            )
-    end
-
-    character:PivotTo(
-        CFrame.new(position)
-    )
-
-    notify("Teleport attempted: "..option)
 end
 
--- MOVEMENT
+local function teleportTo(name)
+    local char = LP.Character
+    local root = getRoot()
+
+    if not char or not root then
+        notify("Character not ready")
+        return
+    end
+
+    local destination = savedPlaces[name]
+
+    if not destination then
+        local obj = findPlace(name)
+
+        if obj then
+            destination = destinationCFrame(obj)
+        end
+    end
+
+    if not destination then
+        notify(name.." not found. Save it first.")
+        return
+    end
+
+    char:PivotTo(destination)
+    notify("Teleport attempted: "..name)
+end
+
+local function teleportSpawn()
+    local char = LP.Character
+
+    local spawn =
+        workspace:FindFirstChildWhichIsA(
+            "SpawnLocation",true
+        )
+
+    if not spawn or not char then
+        notify("Spawn not found")
+        return
+    end
+
+    char:PivotTo(
+        spawn.CFrame*CFrame.new(0,4,0)
+    )
+    notify("Spawn teleport attempted")
+end
+
+-- PLAYER MOVEMENT
+
 local function getHumanoid()
     local char = LP.Character
+
     return char and
-        char:FindFirstChildOfClass(
-            "Humanoid"
-        )
+        char:FindFirstChildOfClass("Humanoid")
 end
 
 local function updateMovement()
@@ -771,10 +803,10 @@ end
 
 connect(UIS.JumpRequest,function()
     if state["Player:Infinite Jump"] then
-        local h = getHumanoid()
+        local hum = getHumanoid()
 
-        if h then
-            h:ChangeState(
+        if hum then
+            hum:ChangeState(
                 Enum.HumanoidStateType.Jumping
             )
         end
@@ -784,13 +816,14 @@ end)
 connect(LP.CharacterAdded,function()
     task.wait(.5)
 
-    if alive then
+    if running then
         updateMovement()
         refreshESP()
     end
 end)
 
 -- FEATURE CONTROLLER
+
 local function applyFeature(category,option,on)
     local key = category..":"..option
     state[key] = on
@@ -799,9 +832,7 @@ local function applyFeature(category,option,on)
         refreshESP()
 
     elseif category == "Combat" then
-        if option == "Aimbot" and not on then
-            lockedTarget = nil
-        elseif option == "Silent Aim" then
+        if option == "Silent Aim" then
             notify("Silent Aim not connected yet")
         end
 
@@ -812,9 +843,7 @@ local function applyFeature(category,option,on)
             updateMovement()
 
         elseif option ~= "Infinite Jump" then
-            notify(
-                option.." needs server integration"
-            )
+            notify(option.." needs game integration")
         end
 
     elseif category == "Misc" then
@@ -833,7 +862,6 @@ local function applyFeature(category,option,on)
         elseif option == "Night Mode" then
             Lighting.ClockTime =
                 on and 0 or oldLight.clock
-
         else
             notify(option.." not connected")
         end
@@ -842,48 +870,35 @@ local function applyFeature(category,option,on)
         if not on then return end
 
         if option == "Teleport to Spawn" then
-            local spawn =
-                workspace:FindFirstChildWhichIsA(
-                    "SpawnLocation",
-                    true
-                )
+            teleportSpawn()
 
-            local root =
-                LP.Character and
-                LP.Character:FindFirstChild(
-                    "HumanoidRootPart"
-                )
+        elseif option == "Teleport to Gun Store" then
+            teleportTo("Gun Store")
 
-            if spawn and root then
-                root.CFrame =
-                    spawn.CFrame *
-                    CFrame.new(0,4,0)
+        elseif option == "Teleport to Bank" then
+            teleportTo("Bank")
 
-                notify("Spawn teleport attempted")
-            else
-                notify("Spawn not found")
-            end
+        elseif option == "Save Gun Store Here" then
+            savePlace("Gun Store")
 
-        elseif option == "Teleport to Gun Shop"
-            or option == "Teleport to Big Bank" then
-
-            teleportTo(option)
-
-        else
-            notify("Destination not configured")
+        elseif option == "Save Bank Here" then
+            savePlace("Bank")
         end
+
+        -- Teleport actions are momentary,
+        -- not persistent toggle states.
+        state[key] = false
     end
 end
 
--- AIM INPUT
-local function matchesKey(input)
-    if selectedKey.EnumType ==
-        Enum.KeyCode then
+-- AIM KEY BINDING
 
-        return input.KeyCode == selectedKey
+local function matchesKey(input)
+    if aimKey.EnumType == Enum.KeyCode then
+        return input.KeyCode == aimKey
     end
 
-    return input.UserInputType == selectedKey
+    return input.UserInputType == aimKey
 end
 
 local keyButton = nil
@@ -895,8 +910,8 @@ connect(UIS.InputBegan,function(input,processed)
             and input.KeyCode ~=
             Enum.KeyCode.Unknown then
 
-            selectedKey = input.KeyCode
-            keyName = input.KeyCode.Name
+            aimKey = input.KeyCode
+            aimKeyName = input.KeyCode.Name
 
         elseif input.UserInputType ==
             Enum.UserInputType.MouseButton1
@@ -905,34 +920,34 @@ connect(UIS.InputBegan,function(input,processed)
             or input.UserInputType ==
             Enum.UserInputType.MouseButton3 then
 
-            selectedKey = input.UserInputType
-            keyName = input.UserInputType.Name
+            aimKey = input.UserInputType
+            aimKeyName = input.UserInputType.Name
         else
             return
         end
 
         binding = false
-        held = false
+        aimHeld = false
 
         if keyButton and keyButton.Parent then
-            keyButton.Text = keyName
+            keyButton.Text = aimKeyName
         end
         return
     end
 
     if not processed and matchesKey(input) then
-        held = true
+        aimHeld = true
     end
 end)
 
 connect(UIS.InputEnded,function(input)
     if matchesKey(input) then
-        held = false
-        lockedTarget = nil
+        aimHeld = false
     end
 end)
 
--- MENU TABS
+-- TABS
+
 local tabs = {
     {"⌂","Home"},
     {"⚔","Combat"},
@@ -978,9 +993,10 @@ local options = {
 
     Teleport = {
         "Teleport to Spawn",
-        "Teleport to Gun Shop",
-        "Teleport to Big Bank",
-        "Custom Location"
+        "Teleport to Gun Store",
+        "Teleport to Bank",
+        "Save Gun Store Here",
+        "Save Bank Here"
     },
 
     Misc = {
@@ -1001,13 +1017,13 @@ local tabButtons = {}
 
 local function makeToggle(category,option,y)
     local row = panel(
-        content,0,y,338,30,color.row
+        content,0,y,338,30,C.row
     )
     round(row,5)
 
-    text(row,option,11,0,270,30,12)
+    label(row,option,11,0,270,30,12)
 
-    local b = ui("TextButton",row,{
+    local b = create("TextButton",row,{
         Position = UDim2.fromOffset(293,5),
         Size = UDim2.fromOffset(41,20),
         Text = "",
@@ -1016,7 +1032,7 @@ local function makeToggle(category,option,y)
     round(b,12)
 
     local dot = panel(
-        b,3,2,16,16,color.white
+        b,3,2,16,16,C.white
     )
     round(dot,10)
 
@@ -1026,14 +1042,12 @@ local function makeToggle(category,option,y)
         local on = state[key] == true
 
         b.BackgroundColor3 =
-            on and color.purple
+            on and C.purple
             or Color3.fromRGB(56,60,70)
 
-        dot.Position =
-            UDim2.fromOffset(
-                on and 22 or 3,
-                2
-            )
+        dot.Position = UDim2.fromOffset(
+            on and 22 or 3,2
+        )
     end
 
     redraw()
@@ -1048,17 +1062,16 @@ local function makeToggle(category,option,y)
     end)
 end
 
--- SLIDERS
 local function makeSlider(name,y,min,max,get,set)
     local row = panel(
-        content,0,y,338,53,color.row
+        content,0,y,338,53,C.row
     )
     round(row,5)
 
-    text(row,name,10,2,260,23,12)
+    label(row,name,10,2,260,23,12)
 
-    local value = text(
-        row,"",282,2,46,23,12,color.green
+    local value = label(
+        row,"",282,2,46,23,12,C.green
     )
     value.TextXAlignment =
         Enum.TextXAlignment.Right
@@ -1070,12 +1083,12 @@ local function makeSlider(name,y,min,max,get,set)
     round(track,4)
 
     local fill = panel(
-        track,0,0,0,5,color.purple
+        track,0,0,0,5,C.purple
     )
     round(fill,4)
 
     local knob = panel(
-        track,0,-5,15,15,color.white
+        track,0,-5,15,15,C.white
     )
     round(knob,8)
 
@@ -1143,28 +1156,29 @@ end
 
 local function makeKeybind(y)
     local row = panel(
-        content,0,y,338,39,color.row
+        content,0,y,338,39,C.row
     )
     round(row,5)
 
-    text(row,"Aim Key",10,5,145,29,12)
+    label(row,"Aim Key",10,5,145,29,12)
 
-    local b = ui("TextButton",row,{
+    local b = create("TextButton",row,{
         Position = UDim2.fromOffset(165,5),
         Size = UDim2.fromOffset(160,29),
-        BackgroundColor3 = color.purple,
+        BackgroundColor3 = C.purple,
         BorderSizePixel = 0,
-        Text = keyName,
-        TextColor3 = color.white,
+        Text = aimKeyName,
+        TextColor3 = C.white,
         TextSize = 12,
         Font = Enum.Font.GothamBold
     })
     round(b,5)
+
     keyButton = b
 
     b.MouseButton1Click:Connect(function()
         binding = true
-        held = false
+        aimHeld = false
         b.Text = "Press a key..."
     end)
 end
@@ -1183,8 +1197,8 @@ local function showPage(name)
     for tab,b in pairs(tabButtons) do
         b.BackgroundColor3 =
             tab == name
-            and color.selected
-            or color.panel
+            and C.selected
+            or C.panel
     end
 
     local y = 0
@@ -1201,9 +1215,7 @@ local function showPage(name)
 
         makeSlider(
             "Smoothness",
-            y,
-            0,
-            20,
+            y,0,20,
             function()
                 return smoothness
             end,
@@ -1216,9 +1228,7 @@ local function showPage(name)
 
         makeSlider(
             "FOV Size",
-            y,
-            20,
-            400,
+            y,20,400,
             function()
                 return fovRadius
             end,
@@ -1228,7 +1238,6 @@ local function showPage(name)
         )
 
         y += 59
-
         makeKeybind(y)
         y += 45
     end
@@ -1244,19 +1253,19 @@ for i,item in ipairs(tabs) do
     local symbol,name =
         item[1],item[2]
 
-    local b = ui("TextButton",sidebar,{
+    local b = create("TextButton",side,{
         Position = UDim2.fromOffset(
             7,5+(i-1)*35
         ),
         Size = UDim2.fromOffset(132,31),
-        BackgroundColor3 = color.panel,
+        BackgroundColor3 = C.panel,
         BorderSizePixel = 0,
         Text = ""
     })
     round(b,6)
 
-    text(b,symbol,10,0,24,31,17)
-    text(b,name,37,0,90,31,12)
+    label(b,symbol,10,0,24,31,17)
+    label(b,name,37,0,90,31,12)
 
     tabButtons[name] = b
 
@@ -1266,35 +1275,28 @@ for i,item in ipairs(tabs) do
 end
 
 -- WINDOW CONTROLS
-local function headerButton(s,x,callback)
-    local b = ui("TextButton",header,{
+
+local function headerButton(symbol,x,callback)
+    local b = create("TextButton",header,{
         Position = UDim2.fromOffset(x,3),
         Size = UDim2.fromOffset(28,29),
         BackgroundTransparency = 1,
-        Text = s,
-        TextColor3 = color.white,
+        Text = symbol,
+        TextColor3 = C.white,
         TextSize = 23
     })
+
     b.MouseButton1Click:Connect(callback)
 end
 
-local cleanup
+local function cleanup()
+    if not running then return end
+    running = false
 
-cleanup = function()
-    if not alive then return end
-    alive = false
-
-    if _G.BronxHubCleanup == cleanup then
-        _G.BronxHubCleanup = nil
-    end
-
-    RS:UnbindFromRenderStep(
-        "BronxHubV42"
-    )
-
+    RS:UnbindFromRenderStep("BronxHubV43")
     clearESP()
 
-    for _,c in ipairs(links) do
+    for _,c in ipairs(connections) do
         c:Disconnect()
     end
 
@@ -1315,12 +1317,11 @@ headerButton("−",680,function()
         UDim2.fromOffset(760,44)
         or UDim2.fromOffset(760,320)
 
-    sidebar.Visible = not minimized
+    side.Visible = not minimized
     page.Visible = not minimized
     right.Visible = not minimized
 end)
 
--- DRAG WINDOW
 local dragging = false
 local dragStart,windowStart
 
@@ -1357,16 +1358,17 @@ connect(UIS.InputChanged,function(input)
     end
 end)
 
--- PLAYER REFRESH
+-- PLAYER UPDATES
+
 local function watchPlayer(p)
     connect(p.CharacterAdded,function()
         task.wait(.4)
-        if alive then refreshESP() end
+        if running then refreshESP() end
     end)
 
     connect(p.CharacterRemoving,function()
         task.defer(function()
-            if alive then refreshESP() end
+            if running then refreshESP() end
         end)
     end)
 end
@@ -1381,29 +1383,30 @@ connect(Players.PlayerAdded,function(p)
     watchPlayer(p)
     task.wait(.4)
 
-    if alive then
+    if running then
         refreshESP()
     end
 end)
 
 connect(Players.PlayerRemoving,function()
     task.defer(function()
-        if alive then refreshESP() end
+        if running then refreshESP() end
     end)
 end)
 
--- RENDER LOOP
+-- RENDER
+
 RS:BindToRenderStep(
-    "BronxHubV42",
+    "BronxHubV43",
     Enum.RenderPriority.Camera.Value+1,
     function(dt)
-        if not alive then return end
+        if not running then return end
 
-        updateCircle()
+        updateFOV()
         renderESP()
         updateAim(dt)
     end
 )
 
 showPage("Teleport")
-notify("Bronx Streets Hub V4.2 loaded")
+notify("Bronx Streets Hub V4.3 loaded")
