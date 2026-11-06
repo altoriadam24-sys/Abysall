@@ -1,171 +1,230 @@
 
--- ABYSALL LOADER
--- ANDRIIVKA + BRONX STREETS
--- One-file Game ID update
+-- ABYSALL MAIN LOADER V2
+-- Supports Bronx Streets and Andriivka
+-- Keep the same Execute script
 
-local NEW_GAME_ID = 10383565741
-local NEW_PLACE_ID = 81748781442029
-local OLD_GAME_ID = 10763808155
-
-local BaseUrl =
+local BASE_URL =
     "https://raw.githubusercontent.com/" ..
     "altoriadam24-sys/Abysall/" ..
     "refs/heads/main/"
 
-local GameList = {
-    [NEW_GAME_ID] = "MyGame",
-    [OLD_GAME_ID] = "MyGame"
+local GAMES = {
+    [10763808155] = "MyGame",
+    [10383565741] = "MyGame"
 }
 
-local env = getgenv()
+local ANDRIIVKA_ID = 10383565741
+local BRONX_ID = 10763808155
 
-if env.Abysall and env.Abysall.LoadedGameId == game.GameId then
-    warn("Abysall already loaded for this game")
-    return
-end
+local env = getgenv()
+local currentGameId = game.GameId
+local currentPlaceId = game.PlaceId
 
 local function fetch(path)
-    return game:HttpGet(BaseUrl .. path)
+    local success, result = pcall(function()
+        return game:HttpGet(BASE_URL .. path)
+    end)
+
+    if not success then
+        error(
+            "[ABYSALL] Download failed: " ..
+            path .. " | " .. tostring(result)
+        )
+    end
+
+    return result
 end
 
-local function loadModule(path)
-    local source = fetch(path)
+local function execute(source, name)
     local compiled, err = loadstring(source)
 
     if not compiled then
-        error("Failed to compile " .. path .. ": " .. tostring(err))
+        error(
+            "[ABYSALL] Compile error in " ..
+            name .. ": " .. tostring(err)
+        )
     end
 
     return compiled()
 end
 
+local function loadFile(path)
+    return execute(fetch(path), path)
+end
+
+-- Cleanup the previous GUI
+if _G.BronxHubCleanup then
+    pcall(_G.BronxHubCleanup)
+end
+
+if _G.AndriivkaHubCleanup then
+    pcall(_G.AndriivkaHubCleanup)
+end
+
+-- Initialize Abysall
 env.Abysall = {
     Legit = true,
-    LoadedGameId = game.GameId
+    LoadedGameId = currentGameId
 }
 
 local Abysall = env.Abysall
 
--- Load shared components
-Abysall.Environment = loadModule(
+-- Required libraries
+Abysall.Environment = loadFile(
     "Components/Environment.luau"
 )
 
-Abysall.ESPLibrary = loadModule(
+Abysall.ESPLibrary = loadFile(
     "Components/ESP.luau"
 )
 
-local function CloneReference(object)
-    if Abysall.Environment
-        and Abysall.Environment.cloneref then
+local function cloneReference(object)
+    local environment = Abysall.Environment
 
-        return Abysall.Environment.cloneref(object)
+    if environment and environment.cloneref then
+        return environment.cloneref(object)
     end
 
     return object
 end
 
 local Services = setmetatable({}, {
-    __index = function(self, name)
-        return CloneReference(game:GetService(name))
+    __index = function(_, name)
+        return cloneReference(game:GetService(name))
     end
 })
 
--- Preserve existing user data
+-- User settings
 local environment = Abysall.Environment
 
-if environment.writefile
+if environment
+    and environment.writefile
     and environment.readfile
     and environment.isfile then
 
-    local filePath = "Abysall/UserData.json"
+    local path = "Abysall/UserData.json"
 
-    if not environment.isfile(filePath) then
-        local data = {
+    if not environment.isfile(path) then
+        if environment.makefolder then
+            pcall(function()
+                environment.makefolder("Abysall")
+            end)
+        end
+
+        local initial = {
             TotalExecutions = 0,
             UILibrary = "Obsidian"
         }
 
-        environment.writefile(
-            filePath,
-            Services.HttpService:JSONEncode(data)
-        )
+        pcall(function()
+            environment.writefile(
+                path,
+                Services.HttpService:JSONEncode(initial)
+            )
+        end)
     end
 
-    local success, decoded = pcall(function()
-        return Services.HttpService:JSONDecode(
-            environment.readfile(filePath)
-        )
+    local ok, data = pcall(function()
+        local raw = environment.readfile(path)
+        return Services.HttpService:JSONDecode(raw)
     end)
 
-    if not success or type(decoded) ~= "table" then
-        decoded = {}
+    if not ok or type(data) ~= "table" then
+        data = {}
     end
 
-    decoded.TotalExecutions =
-        (tonumber(decoded.TotalExecutions) or 0) + 1
+    data.TotalExecutions =
+        (tonumber(data.TotalExecutions) or 0) + 1
 
-    decoded.UILibrary =
-        decoded.UILibrary or "Obsidian"
+    data.UILibrary =
+        data.UILibrary or "Obsidian"
 
-    Abysall.TotalExecutions =
-        decoded.TotalExecutions
+    Abysall.TotalExecutions = data.TotalExecutions
+    Abysall.UILibrary = data.UILibrary
 
-    Abysall.UILibrary =
-        decoded.UILibrary
-
-    environment.writefile(
-        filePath,
-        Services.HttpService:JSONEncode(decoded)
-    )
+    pcall(function()
+        environment.writefile(
+            path,
+            Services.HttpService:JSONEncode(data)
+        )
+    end)
 end
 
--- Load interface and analytics
-Abysall.Interface = loadModule(
+-- Shared interface components
+Abysall.Interface = loadFile(
     "Components/Interface.luau"
 )
 
-Abysall.Analytics = loadModule(
+Abysall.Analytics = loadFile(
     "Components/Analytics.luau"
 )
 
--- Game identification
-local currentGameId = game.GameId
-local currentPlaceId = game.PlaceId
-
-print("========== ABYSALL ==========")
+print("================================")
+print("ABYSALL LOADER V2")
 print("Game ID:", currentGameId)
 print("Place ID:", currentPlaceId)
-print("=============================")
+print("================================")
 
-local currentGame = GameList[currentGameId]
+local gameFolder = GAMES[currentGameId]
 
-if currentGame then
+if gameFolder then
     local path =
-        "Games/" .. currentGame .. "/Loader.luau"
+        "Games/" .. gameFolder .. "/Loader.luau"
 
     local source = fetch(path)
 
-    -- Adapt the existing MyGame ID guard
-    -- when running the new Andriivka game.
-    if currentGameId == NEW_GAME_ID then
+    if currentGameId == ANDRIIVKA_ID then
+
+        -- Adapt the old Game ID guard
         source = source:gsub(
-            "game.GameId ~= " .. OLD_GAME_ID,
-            "game.GameId ~= " .. NEW_GAME_ID
+            "game%.GameId%s*~=%s*" .. BRONX_ID,
+            "game.GameId ~= " .. ANDRIIVKA_ID
         )
 
-        print("Andriivka game detected")
+        -- Update displayed game identity
+        source = source:gsub(
+            "BRONX STREETS HUB",
+            "ANDRIIVKA HUB"
+        )
+
+        source = source:gsub(
+            "BRONX STREETS",
+            "ANDRIIVKA"
+        )
+
+        source = source:gsub(
+            '"BRONX"',
+            '"ANDRIIVKA"'
+        )
+
+        source = source:gsub(
+            '"STREETS"',
+            '"MILITARY"'
+        )
+
+        -- Avoid discarding the right mouse
+        -- input when Roblox marks it processed
+        source = source:gsub(
+            "if not processed and matchesKey%(input%) then",
+            "if (not processed or " ..
+            "input.UserInputType == " ..
+            "Enum.UserInputType.MouseButton2) " ..
+            "and matchesKey(input) then"
+        )
+
+        print(
+            "[ABYSALL] Andriivka configuration loaded"
+        )
+    else
+        print(
+            "[ABYSALL] Bronx Streets configuration loaded"
+        )
     end
 
-    local compiled, err = loadstring(source)
-
-    if not compiled then
-        error("Game loader error: " .. tostring(err))
-    end
-
-    compiled()
+    execute(source, path)
 else
-    loadModule("Games/Universal/Loader.luau")
+    print("[ABYSALL] Loading Universal menu")
+    loadFile("Games/Universal/Loader.luau")
 end
 
-print("Abysall loader finished")
+print("[ABYSALL] Loading complete")
